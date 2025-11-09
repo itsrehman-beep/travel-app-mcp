@@ -339,13 +339,13 @@ def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
 def create_booking(request: CreateBookingRequest) -> BookingResponse:
     """
     Creates a single master booking with optional flight, hotel, and car bookings.
-    Adds passengers and payment, returns complete booking response.
+    Booking starts in 'pending' status. Use process_payment() to complete payment and confirm booking.
     
     Args:
-        request: Booking request with user_id, optional flight/hotel/car bookings, passengers, and payment
+        request: Booking request with user_id, optional flight/hotel/car bookings, and passengers
     
     Returns:
-        Created booking details with all generated IDs and confirmation
+        Created booking details with booking_id. Status is 'pending' until payment is processed.
     """
     # Validation: Ensure at least one booking type is provided
     if not any([request.flight_booking, request.hotel_booking, request.car_booking]):
@@ -367,17 +367,40 @@ def create_booking(request: CreateBookingRequest) -> BookingResponse:
     if request.car_booking and request.car_booking.pickup_time >= request.car_booking.dropoff_time:
         raise ValueError("Car pickup time must be before dropoff time")
     
+    # Calculate total price from individual bookings
+    flights_data = sheets_client.read_sheet('Flight')
+    rooms_data = sheets_client.read_sheet('Room')
+    cars_data = sheets_client.read_sheet('Car')
+    
+    total_price = 0.0
+    if request.flight_booking:
+        flight = next((f for f in flights_data if f.get('id') == request.flight_booking.flight_id), None)
+        if flight:
+            total_price += float(flight.get('base_price', 0)) * request.flight_booking.passengers
+    
+    if request.hotel_booking:
+        room = next((r for r in rooms_data if r.get('id') == request.hotel_booking.room_id), None)
+        if room:
+            nights = (request.hotel_booking.check_out - request.hotel_booking.check_in).days
+            total_price += float(room.get('price_per_night', 0)) * nights
+    
+    if request.car_booking:
+        car = next((c for c in cars_data if c.get('id') == request.car_booking.car_id), None)
+        if car:
+            days = (request.car_booking.dropoff_time - request.car_booking.pickup_time).days
+            total_price += float(car.get('price_per_day', 0)) * max(1, days)
+    
     # Generate booking ID and timestamp
     booking_id = sheets_client.generate_next_id('Booking', 'BK')
     now = datetime.now()
     
-    # Create main booking
+    # Create main booking with 'pending' status
     booking_data = [
         booking_id,
         request.user_id,
-        'confirmed',
+        'pending',
         now.isoformat(),
-        str(request.payment.amount)
+        str(total_price)
     ]
     sheets_client.append_row('Booking', booking_data)
     
@@ -463,39 +486,18 @@ def create_booking(request: CreateBookingRequest) -> BookingResponse:
         sheets_client.append_row('Passenger', passenger_data)
         passenger_ids.append(passenger_id)
     
-    # Create payment
-    payment_id = sheets_client.generate_next_id('Payment', 'PMT')
-    transaction_ref = f'TXN{now.strftime("%Y%m%d%H%M%S")}'
-    payment_data = [
-        payment_id,
-        booking_id,
-        request.payment.method,
-        str(request.payment.amount),
-        now.isoformat(),
-        'success',
-        transaction_ref
-    ]
-    sheets_client.append_row('Payment', payment_data)
-    
-    # Build and return response
+    # Build and return response - payment must be processed separately
     return BookingResponse(
         booking_id=booking_id,
         user_id=request.user_id,
-        status='confirmed',
+        status='pending',
         booked_at=now,
-        total_amount=request.payment.amount,
+        total_amount=total_price,
         flight_booking=flight_booking_summary,
         hotel_booking=hotel_booking_summary,
         car_booking=car_booking_summary,
         passenger_ids=passenger_ids,
-        payment=PaymentSummary(
-            id=payment_id,
-            method=request.payment.method,
-            amount=request.payment.amount,
-            status='success',
-            transaction_ref=transaction_ref,
-            paid_at=now
-        )
+        payment=None  # Payment not yet processed
     )
 
 @mcp.tool()
@@ -685,6 +687,74 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
         'passenger_id': passenger_id,
         'updated_fields': list(updates.keys()),
         'passenger': passenger
+    }
+
+@mcp.tool()
+def process_payment(booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
+    """
+    Processes payment for a pending booking. Changes booking status from 'pending' to 'confirmed'.
+    
+    Args:
+        booking_id: ID of the booking to pay for (e.g., BK0001)
+        payment: Payment details including method and amount
+    
+    Returns:
+        Payment confirmation with transaction details
+    """
+    # Find the booking
+    result = sheets_client.find_row_by_id('Booking', booking_id)
+    if not result:
+        return {'error': f'Booking {booking_id} not found'}
+    
+    row_index, booking = result
+    
+    # Check if booking is pending
+    if booking.get('status') == 'cancelled':
+        return {'error': f'Booking {booking_id} is cancelled and cannot be paid for'}
+    
+    if booking.get('status') == 'confirmed':
+        return {'error': f'Booking {booking_id} is already confirmed and paid'}
+    
+    # Verify payment amount matches booking total
+    booking_total = float(booking.get('total_price', 0))
+    if abs(payment.amount - booking_total) > 0.01:  # Allow for floating point rounding
+        return {'error': f'Payment amount ${payment.amount} does not match booking total ${booking_total}'}
+    
+    # Create payment record
+    payment_id = sheets_client.generate_next_id('Payment', 'PMT')
+    now = datetime.now()
+    transaction_ref = f'TXN{now.strftime("%Y%m%d%H%M%S")}{booking_id[-4:]}'
+    
+    payment_data = [
+        payment_id,
+        booking_id,
+        payment.method,
+        str(payment.amount),
+        now.isoformat(),
+        'success',
+        transaction_ref
+    ]
+    sheets_client.append_row('Payment', payment_data)
+    
+    # Update booking status to confirmed
+    booking_data = [
+        booking['id'],
+        booking['user_id'],
+        'confirmed',
+        booking['booked_at'],
+        booking['total_price']
+    ]
+    sheets_client.update_row('Booking', row_index - 1, booking_data)
+    
+    return {
+        'success': True,
+        'payment_id': payment_id,
+        'booking_id': booking_id,
+        'amount': payment.amount,
+        'status': 'success',
+        'transaction_ref': transaction_ref,
+        'paid_at': now.isoformat(),
+        'booking_status': 'confirmed'
     }
 
 # Run the server

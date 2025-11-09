@@ -241,7 +241,6 @@ class CreateBookingRequest(BaseModel):
     hotel_booking: Optional[HotelBookingInput] = None
     car_booking: Optional[CarBookingInput] = None
     passengers: list[PassengerInput] = Field(default_factory=list)
-    payment: PaymentInput
 
 class FlightWithAvailability(Flight):
     """Flight search result with availability and human-readable location names"""
@@ -304,4 +303,4 @@ class BookingResponse(BaseModel):
     hotel_booking: Optional[HotelBookingSummary] = None
     car_booking: Optional[CarBookingSummary] = None
     passenger_ids: list[str] = Field(default_factory=list)
-    payment: PaymentSummary
+    payment: Optional[PaymentSummary] = None
