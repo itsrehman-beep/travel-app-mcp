@@ -430,5 +430,22 @@ def get_booking_details(booking_id: str) -> dict:
 
 # Run the server
 if __name__ == "__main__":
-    # Run with HTTP transport on port 8000
-    mcp.run(transport="http", host="0.0.0.0", port=8000, path="/mcp")
+    import uvicorn
+    from starlette.middleware.cors import CORSMiddleware
+    
+    # Get the HTTP app
+    app = mcp.http_app()
+    
+    # Add CORS middleware to allow frontend requests
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Allow all origins for development
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["mcp-session-id", "mcp-protocol-version"],
+        max_age=86400,
+    )
+    
+    # Run with uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

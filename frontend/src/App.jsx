@@ -141,7 +141,7 @@ function App() {
     )
 
     const bookingData = {
-      user_id: 'test-user-id',
+      user_id: '42382f88-fcf7-4b7d-ad65-15fff4a0352d',
       flight_id: selectedBookings.flight?.id,
       flight_seat_class: flightSearch.seat_class,
       flight_passengers: passengers.length,
