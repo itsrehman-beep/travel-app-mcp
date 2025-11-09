@@ -44,6 +44,13 @@ class Airport(BaseModel):
     name: str
     city_id: str
 
+class AirportWithCity(BaseModel):
+    """Airport with enriched city information"""
+    code: str
+    name: str
+    city_id: str
+    city_name: str
+
 # ===== FLIGHT DATA =====
 class Flight(BaseModel):
     id: str
@@ -73,12 +80,36 @@ class Hotel(BaseModel):
     contact_number: str
     description: str
 
+class HotelWithCity(BaseModel):
+    """Hotel with enriched city information"""
+    id: str
+    name: str
+    city_id: str
+    city_name: str
+    address: str
+    rating: float
+    contact_number: str
+    description: str
+
 class Room(BaseModel):
     id: str
     hotel_id: str
     room_type: Literal["single", "double", "suite"]
     capacity: int
     price_per_night: float
+
+class RoomWithHotelInfo(BaseModel):
+    """Room with complete hotel information and availability"""
+    id: str
+    hotel_id: str
+    hotel_name: str
+    hotel_address: str
+    hotel_rating: float
+    city_name: str
+    room_type: Literal["single", "double", "suite"]
+    capacity: int
+    price_per_night: float
+    is_available: bool = True  # General availability indicator
 
 class HotelBooking(BaseModel):
     id: str
@@ -92,6 +123,19 @@ class HotelBooking(BaseModel):
 class Car(BaseModel):
     id: str
     city_id: str
+    model: str
+    brand: str
+    year: int
+    seats: int
+    transmission: Literal["manual", "automatic"]
+    fuel_type: str
+    price_per_day: float
+
+class CarWithCity(BaseModel):
+    """Car with enriched city information"""
+    id: str
+    city_id: str
+    city_name: str
     model: str
     brand: str
     year: int

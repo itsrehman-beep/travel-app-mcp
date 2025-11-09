@@ -174,8 +174,8 @@ class SheetsClient:
         response = requests.post(url, headers=headers)
         return response.status_code == 200
     
-    def generate_next_id(self, table_name: str, prefix: str, max_retries: int = 5) -> str:
-        """Generate the next available ID with the given prefix and zero-padded 4-digit counter
+    def generate_next_id(self, table_name: str, prefix: str, width: int = 4, max_retries: int = 5) -> str:
+        """Generate the next available ID with the given prefix and zero-padded counter
         
         IMPORTANT: This implementation has a race condition for concurrent requests.
         For production use, implement atomic counters or use a proper database with auto-increment.
@@ -184,10 +184,11 @@ class SheetsClient:
         Args:
             table_name: Name of the table
             prefix: ID prefix (e.g., 'FL', 'USR', 'BK')
+            width: Number of digits for zero-padding (default: 4)
             max_retries: Maximum number of retries if ID collision detected
         
         Returns:
-            Next available ID (e.g., 'FL0001', 'USR0023')
+            Next available ID (e.g., 'FL0001', 'USR0023', 'PA00001' for width=5)
         
         Raises:
             Exception: If unable to generate unique ID after max_retries
@@ -217,9 +218,9 @@ class SheetsClient:
                 except (ValueError, IndexError):
                     continue
             
-            # Generate next ID
+            # Generate next ID with specified width
             next_num = max_num + 1
-            next_id = f"{prefix}{next_num:04d}"
+            next_id = f"{prefix}{next_num:0{width}d}"
             
             # Double-check uniqueness (mitigates but doesn't eliminate race condition)
             if next_id not in existing_ids:
