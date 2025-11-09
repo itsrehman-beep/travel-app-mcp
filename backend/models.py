@@ -137,51 +137,59 @@ class Payment(BaseModel):
 
 # ===== REQUEST/RESPONSE MODELS =====
 class FlightSearchRequest(BaseModel):
-    origin_code: str
-    destination_code: str
-    departure_date: date
-    seat_class: Literal["economy", "business"] = "economy"
+    """Search for flights. Dates must be in YYYY-MM-DD format (e.g., 2025-12-28)."""
+    origin_code: str = Field(description="3-letter airport code (e.g., JFK, LAX). Use search_airports to find codes.")
+    destination_code: str = Field(description="3-letter airport code (e.g., CDG, NRT). Use search_airports to find codes.")
+    departure_date: date = Field(description="Departure date in YYYY-MM-DD format (e.g., 2025-12-28)")
+    seat_class: Literal["economy", "business"] = Field(default="economy", description="Seat class: economy or business")
 
 class HotelSearchRequest(BaseModel):
-    city_id: str
-    check_in: date
-    check_out: date
-    guests: int
+    """Search for hotel rooms. Dates must be in YYYY-MM-DD format (e.g., 2025-12-28)."""
+    city_id: str = Field(description="City ID (e.g., CY0001). Use get_cities to find city IDs.")
+    check_in: date = Field(description="Check-in date in YYYY-MM-DD format (e.g., 2025-12-28)")
+    check_out: date = Field(description="Check-out date in YYYY-MM-DD format (e.g., 2025-12-30)")
+    guests: int = Field(description="Number of guests", gt=0)
 
 class CarSearchRequest(BaseModel):
-    city_id: str
-    pickup_date: date
-    dropoff_date: date
+    """Search for rental cars. Dates must be in YYYY-MM-DD format (e.g., 2025-12-28)."""
+    city_id: str = Field(description="City ID (e.g., CY0001). Use get_cities to find city IDs.")
+    pickup_date: date = Field(description="Pickup date in YYYY-MM-DD format (e.g., 2025-12-28)")
+    dropoff_date: date = Field(description="Drop-off date in YYYY-MM-DD format (e.g., 2025-12-30)")
 
 # Input models for creating records (without auto-generated IDs)
 class PassengerInput(BaseModel):
-    first_name: str
-    last_name: str
-    gender: str
-    dob: date
-    passport_no: str
+    """Passenger details for flight booking."""
+    first_name: str = Field(description="Passenger first name")
+    last_name: str = Field(description="Passenger last name")
+    gender: str = Field(description="Passenger gender (male/female/other)")
+    dob: date = Field(description="Date of birth in YYYY-MM-DD format (e.g., 1990-05-15)")
+    passport_no: str = Field(description="Passport number")
 
 class FlightBookingInput(BaseModel):
-    flight_id: str
-    seat_class: Literal["economy", "business"] = "economy"
-    passengers: int
+    """Flight booking information."""
+    flight_id: str = Field(description="Flight ID from search results")
+    seat_class: Literal["economy", "business"] = Field(default="economy", description="Seat class: economy or business")
+    passengers: int = Field(description="Number of passengers (must match passenger list length)", gt=0)
 
 class HotelBookingInput(BaseModel):
-    room_id: str
-    check_in: date
-    check_out: date
-    guests: int
+    """Hotel booking information. Dates must be in YYYY-MM-DD format."""
+    room_id: str = Field(description="Room ID from search results")
+    check_in: date = Field(description="Check-in date in YYYY-MM-DD format (e.g., 2025-12-28)")
+    check_out: date = Field(description="Check-out date in YYYY-MM-DD format (e.g., 2025-12-30)")
+    guests: int = Field(description="Number of guests", gt=0)
 
 class CarBookingInput(BaseModel):
-    car_id: str
-    pickup_time: datetime
-    dropoff_time: datetime
-    pickup_location: str
-    dropoff_location: str
+    """Car rental booking information. Datetimes must be in ISO 8601 format."""
+    car_id: str = Field(description="Car ID from search results")
+    pickup_time: datetime = Field(description="Pickup datetime in ISO format (e.g., 2025-12-28T10:00:00)")
+    dropoff_time: datetime = Field(description="Drop-off datetime in ISO format (e.g., 2025-12-30T10:00:00)")
+    pickup_location: str = Field(description="Pickup location address")
+    dropoff_location: str = Field(description="Drop-off location address")
 
 class PaymentInput(BaseModel):
-    method: str = "card"
-    amount: float
+    """Payment information for booking."""
+    method: str = Field(default="card", description="Payment method (card/wallet/upi)")
+    amount: float = Field(description="Total amount to be paid", gt=0)
 
 class CreateBookingRequest(BaseModel):
     user_id: str

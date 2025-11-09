@@ -76,7 +76,21 @@ A full-stack travel booking application that allows users to book flights, hotel
 
 ## Recent Changes (November 9, 2025)
 
-1. **Complete Pydantic Type Safety Refactoring** (Latest):
+1. **Comprehensive Usability and UX Improvements** (Latest):
+   - **DateTime Format Documentation**: Added clear documentation for all date/datetime fields with ISO 8601 format examples (YYYY-MM-DD for dates, YYYY-MM-DDTHH:MM:SS for datetimes)
+   - **Enhanced Search Results with Human-Readable Data**:
+     * Flights now include origin/destination airport names and city names
+     * Hotels now include full details (address, rating) and city name
+     * Cars now include city name for better context
+   - **New Airport Discovery Tools**:
+     * `get_airports_by_city(city_id)`: Find all airports in a specific city
+     * `search_airports(search_term)`: Search airports by name or code with partial matching
+   - **Updated Data Retrieval Tools**: get_cities() and get_airports() now return typed Pydantic models
+   - **Helper Functions**: Added get_city_by_id(), get_airport_by_code(), get_hotel_by_id() to sheets_client.py
+   - **Performance Optimization**: All search endpoints use batch-loading with O(1) dictionary lookups to avoid excessive HTTP requests
+   - **Field Descriptions**: All Pydantic models now have detailed field descriptions with format examples and guidance
+
+2. **Complete Pydantic Type Safety Refactoring**:
    - Added comprehensive input models: PassengerInput, FlightBookingInput, HotelBookingInput, CarBookingInput, PaymentInput
    - Added search request models: FlightSearchRequest, HotelSearchRequest, CarSearchRequest
    - Added response models: BookingResponse, FlightBookingSummary, HotelBookingSummary, CarBookingSummary, PaymentSummary

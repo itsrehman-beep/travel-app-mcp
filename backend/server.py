@@ -30,8 +30,15 @@ def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]
     Returns:
         List of available flights with seat availability and human-readable location info
     """
+    # Batch-load reference data once to avoid multiple HTTP requests
     flights_data = sheets_client.read_sheet('Flight')
     flight_bookings = sheets_client.read_sheet('FlightBooking')
+    airports_data = sheets_client.read_sheet('Airport')
+    cities_data = sheets_client.read_sheet('City')
+    
+    # Build lookup dictionaries for O(1) access
+    airports_by_code = {a['code']: a for a in airports_data if a.get('code')}
+    cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
     
     results = []
     
@@ -52,13 +59,12 @@ def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]
                 )
                 available_seats = 200 - total_bookings  # Assuming 200 seats per flight
                 
-                # Get origin airport and city info
-                origin_airport = sheets_client.get_airport_by_code(flight_row['origin_code'])
-                origin_city = sheets_client.get_city_by_id(origin_airport['city_id']) if origin_airport else None
+                # Lookup airport and city info from pre-loaded dictionaries
+                origin_airport = airports_by_code.get(flight_row['origin_code'])
+                origin_city = cities_by_id.get(origin_airport['city_id']) if origin_airport else None
                 
-                # Get destination airport and city info
-                dest_airport = sheets_client.get_airport_by_code(flight_row['destination_code'])
-                dest_city = sheets_client.get_city_by_id(dest_airport['city_id']) if dest_airport else None
+                dest_airport = airports_by_code.get(flight_row['destination_code'])
+                dest_city = cities_by_id.get(dest_airport['city_id']) if dest_airport else None
                 
                 # Convert to typed model with human-readable names
                 flight = FlightWithAvailability(
@@ -93,9 +99,14 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
     Returns:
         List of available rooms with complete hotel information
     """
+    # Batch-load reference data once to avoid multiple HTTP requests
     hotels_data = sheets_client.read_sheet('Hotel')
     rooms_data = sheets_client.read_sheet('Room')
     hotel_bookings = sheets_client.read_sheet('HotelBooking')
+    cities_data = sheets_client.read_sheet('City')
+    
+    # Build lookup dictionary for O(1) access
+    cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
     
     results = []
     
@@ -103,8 +114,8 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
         if hotel.get('city_id') != request.city_id:
             continue
         
-        # Get city name for this hotel
-        city = sheets_client.get_city_by_id(hotel.get('city_id', ''))
+        # Lookup city name from pre-loaded dictionary
+        city = cities_by_id.get(hotel.get('city_id', ''))
         city_name = city.get('name', '') if city else ''
         
         for room in rooms_data:
@@ -158,8 +169,13 @@ def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
     Returns:
         List of available cars with city information
     """
+    # Batch-load reference data once to avoid multiple HTTP requests
     cars_data = sheets_client.read_sheet('Car')
     car_bookings = sheets_client.read_sheet('CarBooking')
+    cities_data = sheets_client.read_sheet('City')
+    
+    # Build lookup dictionary for O(1) access
+    cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
     
     # Convert dates to datetime for overlap checking
     pickup_dt = datetime.combine(request.pickup_date, datetime.min.time())
@@ -171,8 +187,8 @@ def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
         if car.get('city_id') != request.city_id:
             continue
         
-        # Get city name for this car
-        city = sheets_client.get_city_by_id(car.get('city_id', ''))
+        # Lookup city name from pre-loaded dictionary
+        city = cities_by_id.get(car.get('city_id', ''))
         city_name = city.get('name', '') if city else ''
         
         # Check if car is available (no overlapping bookings)
