@@ -1,0 +1,117 @@
+Project Overview
+
+We are building a full-stack travel booking application that allows users to book flights, hotels, and cars from a single platform.
+The system manages users, sessions, bookings, payments, and passengers, with all data stored in Google Sheets (one sheet per entity) and accessed through a Python helper function. The URLs for each table can be found further below,
+
+The backend is implemented in Python using FastMCP (this is absolutely essential!), which provides:
+
+REST-style endpoints for creating and managing bookings, flights, hotels, cars, and payments
+
+Streamable HTTP endpoints that allow clients to consume real-time data updates if needed
+
+Built-in input/output schema validation using Pydantic models
+
+Automatic MCP discovery, so all tools and endpoints are discoverable to MCP clients
+
+The frontend is interacts with the FastMCP backend to display available flights, hotels, and cars, and to handle bookings. But remember the backedn is Python + FastMCP this cannot be ignored!
+
+Key Principles:
+
+Leverage FastMCP features: Use its built-in schema validation and streamable endpoints instead of building custom infrastructure.
+
+Single source of truth: Google Sheets acts as the persistent datastore.
+
+Unified booking system: A single booking can include multiple passengers or guests.
+
+Structured data flow: Pydantic schemas enforce correct input/output formats for all endpoints and tools.
+
+The data model can be found in mermaid chart code in the attachment but here are some more details about them too along with google sheets URLs, keep in mind you need to populate the tables along with their headers first:
+
+### **1. Users & Authentication**
+
+* **User** – Stores user accounts (email, password, full name, role).
+  **TABLE URL:** [USER](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=0#gid=0)
+* **Session** – Stores authentication sessions linked to `User`.
+  **TABLE URL:** [SESSION](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=196552179#gid=196552179)
+
+**Relationships:**
+
+* `User` → `Session` = one-to-many
+* `User` → `Booking` = one-to-many
+
+---
+
+### **2. Core Entities**
+
+* **City** – Represents cities where hotels, airports, and cars exist.
+  **TABLE URL:** [CITY](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1294933825#gid=1294933825)
+* **Airport** – Airports linked to cities. Flights reference origin/destination airports.
+  **TABLE URL:** [AIRPORT](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=19291421#gid=19291421)
+
+---
+
+### **3. Flight Data**
+
+* **Flight** – Represents flights with airline, aircraft, departure/arrival times, base price, total seats.
+  **TABLE URL:** [FLIGHT](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1829729922#gid=1829729922)
+* **FlightBooking** – Links a booking to a flight and tracks number of passengers.
+  **TABLE URL:** [FLIGHTBOOKING](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1230177364#gid=1230177364)
+
+**Availability:** calculated from `Flight.total_seats` minus all `FlightBooking.passengers`.
+
+---
+
+### **4. Hotels & Rooms**
+
+* **Hotel** – Hotels in cities, with rating, address, contact, description.
+  **TABLE URL:** [HOTEL](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1921469004#gid=1921469004)
+* **Room** – **Physical rooms** in hotels. Tracks type, capacity, price per night.
+  **TABLE URL:** [ROOM](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1960556347#gid=1960556347)
+* **HotelBooking** – Links booking to a room for specific check-in/out dates.
+  **TABLE URL:** [HOTELBOOKING](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1494653271#gid=1494653271)
+
+**Availability:** determined by checking **overlapping bookings** for that room.
+
+---
+
+### **5. Cars**
+
+* **Car** – **Physical cars** in cities, with brand, model, seats, transmission, fuel type, price per day.
+  **TABLE URL:** [CAR](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=628352603#gid=628352603)
+* **CarBooking** – Links booking to a car for a specific pickup/dropoff time and location.
+  **TABLE URL:** [CARBOOKING](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=2051961764#gid=2051961764)
+
+**Availability:** determined by checking **overlapping bookings** for that car.
+
+---
+
+### **6. Passengers**
+
+* **Passenger** – Stores traveler details for a booking.
+  **TABLE URL:** [PASSENGER](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=785424319#gid=785424319)
+
+---
+
+### **7. Payments**
+
+* **Payment** – Stores payment details for each booking.
+  **TABLE URL:** [PAYMENT](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1002825379#gid=1002825379)
+
+---
+
+### **8. Bookings**
+
+* **Booking** – General booking container linking user, passengers, and specific bookings.
+  **TABLE URL:** [BOOKING](https://docs.google.com/spreadsheets/d/1J1AGfOiWizwAlTCKyHjbSV-oWVu6SANJfzp_Fzqb288/edit?gid=1863814684#gid=1863814684)
+
+**Relationships Summary:**
+
+* `Booking` → `FlightBooking` / `HotelBooking` / `CarBooking` = one-to-many
+* `Booking` → `Passenger` = one-to-many
+* `Booking` → `Payment` = one-to-one
+* `FlightBooking` → `Flight` = many-to-one
+* `HotelBooking` → `Room` = one-to-one per date range
+* `CarBooking` → `Car` = one-to-one per time range
+* `Room` → `Hotel`, `Hotel` → `City`
+* `Car` → `City`
+* `Flight` → `Airport` origin/destination
