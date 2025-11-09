@@ -1,6 +1,7 @@
 from fastmcp import FastMCP
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Any
+import re
 from models import (
     Flight, FlightWithAvailability,
     Hotel, HotelWithCity, Room, RoomWithAvailability, RoomWithHotelInfo,
@@ -181,12 +182,15 @@ def list_hotels(city: Optional[str] = None) -> List[HotelWithCity]:
     # Determine if filter is by ID or name
     target_city_id = None
     if city:
-        if city.startswith('CY'):
+        # Normalize input: strip whitespace and uppercase for ID check
+        city_normalized = city.strip().upper()
+        # Check if it matches city ID pattern: CY followed by digits (e.g., CY0001)
+        if re.match(r'^CY\d+$', city_normalized):
             # It's a city ID
-            target_city_id = city
+            target_city_id = city_normalized
         else:
             # It's a city name - do case-insensitive lookup
-            city_obj = cities_by_name.get(city.lower())
+            city_obj = cities_by_name.get(city.lower().strip())
             if city_obj:
                 target_city_id = city_obj['id']
     
@@ -290,12 +294,15 @@ def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
     # Determine if filter is by ID or name
     target_city_id = None
     if city:
-        if city.startswith('CY'):
+        # Normalize input: strip whitespace and uppercase for ID check
+        city_normalized = city.strip().upper()
+        # Check if it matches city ID pattern: CY followed by digits (e.g., CY0001)
+        if re.match(r'^CY\d+$', city_normalized):
             # It's a city ID
-            target_city_id = city
+            target_city_id = city_normalized
         else:
             # It's a city name - do case-insensitive lookup
-            city_obj = cities_by_name.get(city.lower())
+            city_obj = cities_by_name.get(city.lower().strip())
             if city_obj:
                 target_city_id = city_obj['id']
     
