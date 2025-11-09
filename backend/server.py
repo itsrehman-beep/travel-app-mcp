@@ -71,14 +71,15 @@ def list_airports(city_id: str) -> List[AirportWithCity]:
     return result
 
 @mcp.tool()
-def list_flights(origin_code: str, destination_code: str, date: str) -> List[FlightWithAvailability]:
+def list_flights(origin_code: Optional[str] = None, destination_code: Optional[str] = None, date: Optional[str] = None) -> List[FlightWithAvailability]:
     """
     Returns flights with availability and human-readable origin/destination information.
+    All parameters are optional - if none provided, returns ALL flights.
     
     Args:
-        origin_code: Origin airport code (e.g., 'JFK')
-        destination_code: Destination airport code (e.g., 'LAX')
-        date: Flight date in YYYY-MM-DD format (e.g., '2025-11-15')
+        origin_code: Optional origin airport code (e.g., 'JFK'). If omitted, returns flights from all origins.
+        destination_code: Optional destination airport code (e.g., 'LAX'). If omitted, returns flights to all destinations.
+        date: Optional flight date in YYYY-MM-DD format (e.g., '2025-11-15'). If omitted, returns flights on all dates.
     
     Returns:
         List of available flights with seat availability and location info
@@ -93,11 +94,13 @@ def list_flights(origin_code: str, destination_code: str, date: str) -> List[Fli
     airports_by_code = {a['code']: a for a in airports_data if a.get('code')}
     cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
     
-    # Parse target date
-    try:
-        target_date = datetime.fromisoformat(date).date()
-    except ValueError:
-        raise ValueError(f"Invalid date format. Expected YYYY-MM-DD, got: {date}")
+    # Parse target date if provided
+    target_date = None
+    if date:
+        try:
+            target_date = datetime.fromisoformat(date).date()
+        except ValueError:
+            raise ValueError(f"Invalid date format. Expected YYYY-MM-DD, got: {date}")
     
     results = []
     
@@ -105,60 +108,65 @@ def list_flights(origin_code: str, destination_code: str, date: str) -> List[Fli
         if not flight_row.get('id'):
             continue
             
-        if (flight_row.get('origin_code') == origin_code and 
-            flight_row.get('destination_code') == destination_code):
+        # Apply filters only if provided
+        if origin_code and flight_row.get('origin_code') != origin_code:
+            continue
+        if destination_code and flight_row.get('destination_code') != destination_code:
+            continue
             
-            flight_date = datetime.fromisoformat(flight_row['departure_time']).date()
-            if flight_date == target_date:
-                # Calculate available seats (assuming all bookings are economy/business, 100 seats each)
-                economy_bookings = sum(
-                    int(fb.get('passengers', 0)) 
-                    for fb in flight_bookings 
-                    if fb.get('flight_id') == flight_row['id'] and fb.get('seat_class') == 'economy'
-                )
-                business_bookings = sum(
-                    int(fb.get('passengers', 0)) 
-                    for fb in flight_bookings 
-                    if fb.get('flight_id') == flight_row['id'] and fb.get('seat_class') == 'business'
-                )
-                # Simplified availability: 100 economy + 100 business = 200 total
-                available_seats = 200 - (economy_bookings + business_bookings)
-                
-                # Lookup airport and city info
-                origin_airport = airports_by_code.get(flight_row['origin_code'])
-                origin_city = cities_by_id.get(origin_airport['city_id']) if origin_airport else None
-                
-                dest_airport = airports_by_code.get(flight_row['destination_code'])
-                dest_city = cities_by_id.get(dest_airport['city_id']) if dest_airport else None
-                
-                # Convert to typed model with human-readable names
-                flight = FlightWithAvailability(
-                    id=flight_row['id'],
-                    flight_number=flight_row['flight_number'],
-                    airline_name=flight_row['airline_name'],
-                    aircraft_model=flight_row['aircraft_model'],
-                    origin_code=flight_row['origin_code'],
-                    destination_code=flight_row['destination_code'],
-                    departure_time=datetime.fromisoformat(flight_row['departure_time']),
-                    arrival_time=datetime.fromisoformat(flight_row['arrival_time']),
-                    base_price=float(flight_row['base_price']),
-                    available_seats=available_seats,
-                    origin_airport_name=origin_airport.get('name', '') if origin_airport else '',
-                    origin_city_name=origin_city.get('name', '') if origin_city else '',
-                    destination_airport_name=dest_airport.get('name', '') if dest_airport else '',
-                    destination_city_name=dest_city.get('name', '') if dest_city else ''
-                )
-                results.append(flight)
+        flight_date = datetime.fromisoformat(flight_row['departure_time']).date()
+        if target_date and flight_date != target_date:
+            continue
+        # Calculate available seats (assuming all bookings are economy/business, 100 seats each)
+        economy_bookings = sum(
+            int(fb.get('passengers', 0)) 
+            for fb in flight_bookings 
+            if fb.get('flight_id') == flight_row['id'] and fb.get('seat_class') == 'economy'
+        )
+        business_bookings = sum(
+            int(fb.get('passengers', 0)) 
+            for fb in flight_bookings 
+            if fb.get('flight_id') == flight_row['id'] and fb.get('seat_class') == 'business'
+        )
+        # Simplified availability: 100 economy + 100 business = 200 total
+        available_seats = 200 - (economy_bookings + business_bookings)
+        
+        # Lookup airport and city info
+        origin_airport = airports_by_code.get(flight_row['origin_code'])
+        origin_city = cities_by_id.get(origin_airport['city_id']) if origin_airport else None
+        
+        dest_airport = airports_by_code.get(flight_row['destination_code'])
+        dest_city = cities_by_id.get(dest_airport['city_id']) if dest_airport else None
+        
+        # Convert to typed model with human-readable names
+        flight = FlightWithAvailability(
+            id=flight_row['id'],
+            flight_number=flight_row['flight_number'],
+            airline_name=flight_row['airline_name'],
+            aircraft_model=flight_row['aircraft_model'],
+            origin_code=flight_row['origin_code'],
+            destination_code=flight_row['destination_code'],
+            departure_time=datetime.fromisoformat(flight_row['departure_time']),
+            arrival_time=datetime.fromisoformat(flight_row['arrival_time']),
+            base_price=float(flight_row['base_price']),
+            available_seats=available_seats,
+            origin_airport_name=origin_airport.get('name', '') if origin_airport else '',
+            origin_city_name=origin_city.get('name', '') if origin_city else '',
+            destination_airport_name=dest_airport.get('name', '') if dest_airport else '',
+            destination_city_name=dest_city.get('name', '') if dest_city else ''
+        )
+        results.append(flight)
     
     return results
 
 @mcp.tool()
-def list_hotels(city_id: str) -> List[HotelWithCity]:
+def list_hotels(city: Optional[str] = None) -> List[HotelWithCity]:
     """
-    Returns hotels in a specific city with full details.
+    Returns hotels with full details. Optional city filter by name or ID.
+    If no city provided, returns ALL hotels.
     
     Args:
-        city_id: ID of the city (e.g., CY0001)
+        city: Optional city name (e.g., 'New York') or city ID (e.g., 'CY0001'). If omitted, returns all hotels.
     
     Returns:
         List of hotels with complete information including city name
@@ -166,24 +174,44 @@ def list_hotels(city_id: str) -> List[HotelWithCity]:
     hotels_data = sheets_client.read_sheet('Hotel')
     cities_data = sheets_client.read_sheet('City')
     
-    # Build city lookup
+    # Build city lookups
     cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
-    city = cities_by_id.get(city_id)
-    city_name = city.get('name', '') if city else ''
+    cities_by_name = {c['name'].lower(): c for c in cities_data if c.get('name')}
+    
+    # Determine if filter is by ID or name
+    target_city_id = None
+    if city:
+        if city.startswith('CY'):
+            # It's a city ID
+            target_city_id = city
+        else:
+            # It's a city name - do case-insensitive lookup
+            city_obj = cities_by_name.get(city.lower())
+            if city_obj:
+                target_city_id = city_obj['id']
     
     results = []
     for hotel in hotels_data:
-        if hotel.get('city_id') == city_id and hotel.get('id'):
-            results.append(HotelWithCity(
-                id=hotel['id'],
-                name=hotel['name'],
-                city_id=hotel['city_id'],
-                city_name=city_name,
-                address=hotel.get('address', ''),
-                rating=float(hotel.get('rating', 0)),
-                contact_number=hotel.get('contact_number', ''),
-                description=hotel.get('description', '')
-            ))
+        if not hotel.get('id'):
+            continue
+            
+        # Apply city filter if provided
+        if target_city_id and hotel.get('city_id') != target_city_id:
+            continue
+        
+        city_obj = cities_by_id.get(hotel.get('city_id', ''))
+        city_name = city_obj.get('name', '') if city_obj else ''
+        
+        results.append(HotelWithCity(
+            id=hotel['id'],
+            name=hotel['name'],
+            city_id=hotel['city_id'],
+            city_name=city_name,
+            address=hotel.get('address', ''),
+            rating=float(hotel.get('rating', 0)),
+            contact_number=hotel.get('contact_number', ''),
+            description=hotel.get('description', '')
+        ))
     
     return results
 
@@ -241,12 +269,13 @@ def list_rooms(hotel_id: str) -> List[RoomWithHotelInfo]:
     return results
 
 @mcp.tool()
-def list_cars(city_id: str) -> List[CarWithCity]:
+def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
     """
-    Returns available cars in a specific city with full location information.
+    Returns available cars with full location information. Optional city filter by name or ID.
+    If no city provided, returns ALL cars.
     
     Args:
-        city_id: ID of the city (e.g., CY0001)
+        city: Optional city name (e.g., 'Tokyo') or city ID (e.g., 'CY0001'). If omitted, returns all cars.
     
     Returns:
         List of cars with complete details including city name
@@ -254,26 +283,46 @@ def list_cars(city_id: str) -> List[CarWithCity]:
     cars_data = sheets_client.read_sheet('Car')
     cities_data = sheets_client.read_sheet('City')
     
-    # Build city lookup
+    # Build city lookups
     cities_by_id = {c['id']: c for c in cities_data if c.get('id')}
-    city = cities_by_id.get(city_id)
-    city_name = city.get('name', '') if city else ''
+    cities_by_name = {c['name'].lower(): c for c in cities_data if c.get('name')}
+    
+    # Determine if filter is by ID or name
+    target_city_id = None
+    if city:
+        if city.startswith('CY'):
+            # It's a city ID
+            target_city_id = city
+        else:
+            # It's a city name - do case-insensitive lookup
+            city_obj = cities_by_name.get(city.lower())
+            if city_obj:
+                target_city_id = city_obj['id']
     
     results = []
     for car in cars_data:
-        if car.get('city_id') == city_id and car.get('id'):
-            results.append(CarWithCity(
-                id=car['id'],
-                city_id=car['city_id'],
-                city_name=city_name,
-                model=car['model'],
-                brand=car['brand'],
-                year=int(car['year']),
-                seats=int(car['seats']),
-                transmission=car['transmission'],
-                fuel_type=car['fuel_type'],
-                price_per_day=float(car['price_per_day'])
-            ))
+        if not car.get('id'):
+            continue
+            
+        # Apply city filter if provided
+        if target_city_id and car.get('city_id') != target_city_id:
+            continue
+        
+        city_obj = cities_by_id.get(car.get('city_id', ''))
+        city_name = city_obj.get('name', '') if city_obj else ''
+        
+        results.append(CarWithCity(
+            id=car['id'],
+            city_id=car['city_id'],
+            city_name=city_name,
+            model=car['model'],
+            brand=car['brand'],
+            year=int(car['year']),
+            seats=int(car['seats']),
+            transmission=car['transmission'],
+            fuel_type=car['fuel_type'],
+            price_per_day=float(car['price_per_day'])
+        ))
     
     return results
 
@@ -629,210 +678,6 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
         'passenger_id': passenger_id,
         'updated_fields': list(updates.keys()),
         'passenger': passenger
-    }
-
-@mcp.tool()
-def test_tools() -> Dict[str, Any]:
-    """
-    Runs dummy tests for all tools and returns success/failure status with outputs.
-    This is a comprehensive end-to-end test of the booking system.
-    
-    Returns:
-        Test results with success/failure status for each tool
-    """
-    results = {}
-    
-    # Test 1: list_cities
-    try:
-        cities = list_cities()
-        results['list_cities'] = {
-            'status': 'success',
-            'count': len(cities),
-            'sample': cities[0].dict() if cities else None
-        }
-    except Exception as e:
-        results['list_cities'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 2: list_airports (use first city if available)
-    try:
-        cities = list_cities()
-        if cities:
-            airports = list_airports(cities[0].id)
-            results['list_airports'] = {
-                'status': 'success',
-                'city_id': cities[0].id,
-                'count': len(airports),
-                'sample': airports[0] if airports else None
-            }
-        else:
-            results['list_airports'] = {'status': 'skipped', 'reason': 'No cities available'}
-    except Exception as e:
-        results['list_airports'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 3: list_flights
-    try:
-        flights = list_flights('JFK', 'LAX', '2025-12-01')
-        results['list_flights'] = {
-            'status': 'success',
-            'count': len(flights),
-            'sample': flights[0].dict() if flights else None
-        }
-    except Exception as e:
-        results['list_flights'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 4: list_hotels
-    try:
-        cities = list_cities()
-        if cities:
-            hotels = list_hotels(cities[0].id)
-            results['list_hotels'] = {
-                'status': 'success',
-                'city_id': cities[0].id,
-                'count': len(hotels),
-                'sample': hotels[0] if hotels else None
-            }
-        else:
-            results['list_hotels'] = {'status': 'skipped', 'reason': 'No cities available'}
-    except Exception as e:
-        results['list_hotels'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 5: list_rooms
-    try:
-        cities = list_cities()
-        if cities:
-            hotels = list_hotels(cities[0].id)
-            if hotels:
-                rooms = list_rooms(hotels[0]['id'])
-                results['list_rooms'] = {
-                    'status': 'success',
-                    'hotel_id': hotels[0]['id'],
-                    'count': len(rooms),
-                    'sample': rooms[0] if rooms else None
-                }
-            else:
-                results['list_rooms'] = {'status': 'skipped', 'reason': 'No hotels available'}
-        else:
-            results['list_rooms'] = {'status': 'skipped', 'reason': 'No cities available'}
-    except Exception as e:
-        results['list_rooms'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 6: list_cars
-    try:
-        cities = list_cities()
-        if cities:
-            cars = list_cars(cities[0].id)
-            results['list_cars'] = {
-                'status': 'success',
-                'city_id': cities[0].id,
-                'count': len(cars),
-                'sample': cars[0] if cars else None
-            }
-        else:
-            results['list_cars'] = {'status': 'skipped', 'reason': 'No cities available'}
-    except Exception as e:
-        results['list_cars'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 7: create_booking (create a test booking)
-    try:
-        test_booking = CreateBookingRequest(
-            user_id='USR0001',
-            flight_booking=FlightBookingInput(
-                flight_id='FL0001',
-                seat_class='economy',
-                passengers=1
-            ),
-            passengers=[
-                PassengerInput(
-                    first_name='Test',
-                    last_name='Passenger',
-                    gender='male',
-                    dob=date(1990, 1, 1),
-                    passport_no='TEST123456'
-                )
-            ],
-            payment=PaymentInput(
-                method='credit_card',
-                amount=500.0
-            )
-        )
-        booking_response = create_booking(test_booking)
-        results['create_booking'] = {
-            'status': 'success',
-            'booking_id': booking_response.booking_id,
-            'passenger_ids': booking_response.passenger_ids
-        }
-        
-        # Save booking_id for subsequent tests
-        test_booking_id = booking_response.booking_id
-        test_passenger_id = booking_response.passenger_ids[0] if booking_response.passenger_ids else None
-        
-    except Exception as e:
-        results['create_booking'] = {'status': 'failed', 'error': str(e)}
-        test_booking_id = None
-        test_passenger_id = None
-    
-    # Test 8: get_booking
-    try:
-        if test_booking_id:
-            booking_details = get_booking(test_booking_id)
-            results['get_booking'] = {
-                'status': 'success',
-                'booking_id': test_booking_id,
-                'has_flight': len(booking_details.get('flight_bookings', [])) > 0,
-                'has_passengers': len(booking_details.get('passengers', [])) > 0,
-                'has_payment': booking_details.get('payment') is not None
-            }
-        else:
-            results['get_booking'] = {'status': 'skipped', 'reason': 'No test booking created'}
-    except Exception as e:
-        results['get_booking'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 9: update_passenger
-    try:
-        if test_passenger_id:
-            update_result = update_passenger(test_passenger_id, {
-                'first_name': 'Updated',
-                'last_name': 'TestUser'
-            })
-            results['update_passenger'] = {
-                'status': 'success',
-                'passenger_id': test_passenger_id,
-                'updated': update_result.get('success', False)
-            }
-        else:
-            results['update_passenger'] = {'status': 'skipped', 'reason': 'No test passenger created'}
-    except Exception as e:
-        results['update_passenger'] = {'status': 'failed', 'error': str(e)}
-    
-    # Test 10: cancel_booking
-    try:
-        if test_booking_id:
-            cancel_result = cancel_booking(test_booking_id)
-            results['cancel_booking'] = {
-                'status': 'success',
-                'booking_id': test_booking_id,
-                'cancelled': cancel_result.get('success', False)
-            }
-        else:
-            results['cancel_booking'] = {'status': 'skipped', 'reason': 'No test booking created'}
-    except Exception as e:
-        results['cancel_booking'] = {'status': 'failed', 'error': str(e)}
-    
-    # Summary
-    total_tests = len(results)
-    successful = sum(1 for r in results.values() if r.get('status') == 'success')
-    failed = sum(1 for r in results.values() if r.get('status') == 'failed')
-    skipped = sum(1 for r in results.values() if r.get('status') == 'skipped')
-    
-    return {
-        'summary': {
-            'total': total_tests,
-            'successful': successful,
-            'failed': failed,
-            'skipped': skipped,
-            'success_rate': f'{(successful / total_tests * 100):.1f}%' if total_tests > 0 else '0%'
-        },
-        'results': results
     }
 
 # Run the server

@@ -74,24 +74,28 @@ A full-stack travel booking application that allows users to book flights, hotel
 - **Hotels**: Overlap detection for room bookings on specific dates
 - **Cars**: Time overlap detection for car rentals
 
-## MCP Tools (11 Total)
+## MCP Tools (10 Total)
 
-### Listing Tools (6 tools)
+### Discovery Tools (6 tools)
 1. **`list_cities()`** → Returns all cities with details
 2. **`list_airports(city_id)`** → Returns airports in a city with airport and city names
-3. **`list_flights(origin_code, destination_code, date)`** → Returns flights with availability and human-readable origin/destination info
-4. **`list_hotels(city_id)`** → Returns hotels in a city with full details and city name
-5. **`list_rooms(hotel_id)`** → Returns rooms with availability, hotel info, and city name
-6. **`list_cars(city_id)`** → Returns cars with full location info and city name
+3. **`list_flights(origin_code?, destination_code?, date?)`** → Returns flights with availability (all params optional - returns ALL flights if no filters)
+4. **`list_hotels(city?)`** → Returns hotels, optionally filtered by city name or ID (returns ALL hotels if no filter)
+5. **`list_rooms(hotel_id)`** → Returns rooms with real-time availability for a specific hotel
+6. **`list_cars(city?)`** → Returns cars, optionally filtered by city name or ID (returns ALL cars if no filter)
 
-### Booking Management Tools (5 tools)
+### Booking Management Tools (4 tools)
 7. **`create_booking(request)`** → Creates a single master booking with optional flight/hotel/car bookings, passengers, and payment
 8. **`get_booking(booking_id)`** → Returns full booking details including all sub-bookings, passengers, and payment
-9. **`cancel_booking(booking_id)`** → Cancels a booking and refunds payment
+9. **`cancel_booking(booking_id)`** → Cancels a booking and automatically refunds payment
 10. **`update_passenger(passenger_id, updates)`** → Updates passenger information
 
-### Testing Tool (1 tool)
-11. **`test_tools()`** → Runs comprehensive end-to-end tests for all 10 tools
+### Typical Booking Workflow
+1. **Browse/Search** → Use `list_flights()`, `list_hotels()`, `list_cars()` (with or without filters) to view options
+2. **Select Items** → Note the IDs from search results (e.g., FL0001, HTL0001, CAR0001)
+3. **Create Booking** → Call `create_booking()` with the selected IDs, passenger details, and payment
+4. **Receive Confirmation** → Get booking_id, passenger_ids, and payment_id
+5. **Manage Booking** → Use `get_booking()`, `update_passenger()`, or `cancel_booking()` as needed
 
 ## Standardized ID Format
 
@@ -111,36 +115,56 @@ All entities use prefix + zero-padded digits:
 
 ## Recent Changes (November 9, 2025)
 
-1. **Complete MCP Tools Refactoring** (Latest):
+1. **Major API Simplification & UX Improvements** (Latest):
+   - **Optional Filtering for Browse/Search Tools**:
+     * `list_flights()` - All parameters now optional (returns ALL flights if no filters)
+     * `list_hotels()` - Accepts optional city name OR city ID (returns ALL hotels if omitted)
+     * `list_cars()` - Accepts optional city name OR city ID (returns ALL cars if omitted)
+     * Enables both browsing (no filters) and searching (with filters) use cases
+   
+   - **City Name Support**:
+     * `list_hotels()` and `list_cars()` now accept city names (e.g., "Tokyo") in addition to IDs
+     * Case-insensitive city name matching for better user experience
+     * Automatically detects whether parameter is ID (starts with "CY") or name
+   
+   - **Removed Internal Tools**:
+     * Removed `test_tools()` - internal testing tool not needed in production API
+     * Reduced API surface area from 11 to 10 production tools
+
+2. **Complete MCP Tools Refactoring**:
    - **Tool Renaming & Simplification**:
      * `get_cities()` → `list_cities()`
-     * `search_flights(request)` → `list_flights(origin_code, destination_code, date)` - simpler parameters
+     * `search_flights(request)` → `list_flights()` with optional parameters
      * `search_hotels()` removed - split into `list_hotels()` and `list_rooms()`
-     * `search_cars(request)` → `list_cars(city_id)` - simpler parameters
+     * `search_cars(request)` → `list_cars()` with optional parameter
      * `get_booking_details()` → `get_booking()`
      * Removed: `get_airports()`, `search_airports()`, `get_user_bookings()`
    
    - **New Tools Created**:
-     * `list_hotels(city_id)` - List all hotels in a city with enriched data
+     * `list_hotels()` - List hotels with optional city filter
      * `list_rooms(hotel_id)` - List rooms with real availability calculation
      * `cancel_booking(booking_id)` - Cancel bookings with automatic refund
      * `update_passenger(passenger_id, updates)` - Update passenger details
-     * `test_tools()` - Comprehensive end-to-end testing
 
    - **Enhanced Pydantic Models**:
      * Created AirportWithCity, HotelWithCity, RoomWithHotelInfo, CarWithCity
      * All list tools now return proper typed Pydantic models (not raw dictionaries)
      * Room availability now calculated based on future bookings
 
+   - **Critical Bug Fixes**:
+     * Fixed row indexing bugs in cancel_booking and update_passenger
+     * These bugs could have caused data corruption by updating wrong sheet rows
+     * Now correctly subtracts 1 from find_row_by_id result before calling update_row
+
    - **ID Generation Updates**:
      * Extended `generate_next_id()` to accept optional `width` parameter
      * Passenger IDs use width=5 (PA00001), all others use width=4
-     * Fixed row indexing bugs in cancel_booking and update_passenger
+     * Ensures consistency across all entity types
 
    - **Performance & Usability**:
      * All tools maintain batch-loading for O(1) lookups
      * All responses include human-readable names (city names, airport names, hotel details)
-     * Simplified parameters for better frontend developer experience
+     * Simplified parameters for better developer experience
 
 2. **Previous Enhancements**:
    - DateTime format documentation with ISO 8601 examples
