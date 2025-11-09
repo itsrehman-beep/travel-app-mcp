@@ -141,13 +141,43 @@ class CarSearchRequest(BaseModel):
     pickup_date: date
     dropoff_date: date
 
+# Input models for creating records (without auto-generated IDs)
+class PassengerInput(BaseModel):
+    first_name: str
+    last_name: str
+    gender: str
+    dob: date
+    passport_no: str
+
+class FlightBookingInput(BaseModel):
+    flight_id: str
+    seat_class: Literal["economy", "business"] = "economy"
+    passengers: int
+
+class HotelBookingInput(BaseModel):
+    room_id: str
+    check_in: date
+    check_out: date
+    guests: int
+
+class CarBookingInput(BaseModel):
+    car_id: str
+    pickup_time: datetime
+    dropoff_time: datetime
+    pickup_location: str
+    dropoff_location: str
+
+class PaymentInput(BaseModel):
+    method: str = "card"
+    amount: float
+
 class CreateBookingRequest(BaseModel):
     user_id: str
-    flight_booking: Optional[FlightBooking] = None
-    hotel_booking: Optional[HotelBooking] = None
-    car_booking: Optional[CarBooking] = None
-    passengers: list[Passenger]
-    payment: Payment
+    flight_booking: Optional[FlightBookingInput] = None
+    hotel_booking: Optional[HotelBookingInput] = None
+    car_booking: Optional[CarBookingInput] = None
+    passengers: list[PassengerInput] = Field(default_factory=list)
+    payment: PaymentInput
 
 class FlightWithAvailability(Flight):
     available_seats: int
@@ -158,3 +188,45 @@ class RoomWithAvailability(Room):
 
 class CarWithAvailability(Car):
     available: bool
+
+# ===== BOOKING RESPONSE MODELS =====
+class FlightBookingSummary(BaseModel):
+    id: str
+    flight_id: str
+    seat_class: Literal["economy", "business"]
+    passengers: int
+
+class HotelBookingSummary(BaseModel):
+    id: str
+    room_id: str
+    check_in: date
+    check_out: date
+    guests: int
+
+class CarBookingSummary(BaseModel):
+    id: str
+    car_id: str
+    pickup_time: datetime
+    dropoff_time: datetime
+    pickup_location: str
+    dropoff_location: str
+
+class PaymentSummary(BaseModel):
+    id: str
+    method: str
+    amount: float
+    status: Literal["success", "failed", "refunded"]
+    transaction_ref: str
+    paid_at: datetime
+
+class BookingResponse(BaseModel):
+    booking_id: str
+    user_id: str
+    status: Literal["pending", "confirmed", "cancelled"]
+    booked_at: datetime
+    total_amount: float
+    flight_booking: Optional[FlightBookingSummary] = None
+    hotel_booking: Optional[HotelBookingSummary] = None
+    car_booking: Optional[CarBookingSummary] = None
+    passenger_ids: list[str] = Field(default_factory=list)
+    payment: PaymentSummary
