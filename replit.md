@@ -74,55 +74,80 @@ A full-stack travel booking application that allows users to book flights, hotel
 - **Hotels**: Overlap detection for room bookings on specific dates
 - **Cars**: Time overlap detection for car rentals
 
+## MCP Tools (11 Total)
+
+### Listing Tools (6 tools)
+1. **`list_cities()`** → Returns all cities with details
+2. **`list_airports(city_id)`** → Returns airports in a city with airport and city names
+3. **`list_flights(origin_code, destination_code, date)`** → Returns flights with availability and human-readable origin/destination info
+4. **`list_hotels(city_id)`** → Returns hotels in a city with full details and city name
+5. **`list_rooms(hotel_id)`** → Returns rooms with availability, hotel info, and city name
+6. **`list_cars(city_id)`** → Returns cars with full location info and city name
+
+### Booking Management Tools (5 tools)
+7. **`create_booking(request)`** → Creates a single master booking with optional flight/hotel/car bookings, passengers, and payment
+8. **`get_booking(booking_id)`** → Returns full booking details including all sub-bookings, passengers, and payment
+9. **`cancel_booking(booking_id)`** → Cancels a booking and refunds payment
+10. **`update_passenger(passenger_id, updates)`** → Updates passenger information
+
+### Testing Tool (1 tool)
+11. **`test_tools()`** → Runs comprehensive end-to-end tests for all 10 tools
+
+## Standardized ID Format
+
+All entities use prefix + zero-padded digits:
+- **Booking**: BK + 4 digits (BK0001)
+- **FlightBooking**: FBK + 4 digits (FBK0001)
+- **HotelBooking**: HBK + 4 digits (HBK0001)
+- **CarBooking**: CBK + 4 digits (CBK0001)
+- **Passenger**: PA + 5 digits (PA00001) ⭐ *Only entity using 5 digits*
+- **Payment**: PMT + 4 digits (PMT0001)
+- **Flight**: FL + 4 digits (FL0001)
+- **Room**: RM + 4 digits (RM0001)
+- **Car**: CAR + 4 digits (CAR0001)
+- **User**: USR + 4 digits (USR0001)
+- **City**: CY + 4 digits (CY0001)
+- **Hotel**: HTL + 4 digits (HTL0001)
+
 ## Recent Changes (November 9, 2025)
 
-1. **Comprehensive Usability and UX Improvements** (Latest):
-   - **DateTime Format Documentation**: Added clear documentation for all date/datetime fields with ISO 8601 format examples (YYYY-MM-DD for dates, YYYY-MM-DDTHH:MM:SS for datetimes)
-   - **Enhanced Search Results with Human-Readable Data**:
-     * Flights now include origin/destination airport names and city names
-     * Hotels now include full details (address, rating) and city name
-     * Cars now include city name for better context
-   - **New Airport Discovery Tools**:
-     * `get_airports_by_city(city_id)`: Find all airports in a specific city
-     * `search_airports(search_term)`: Search airports by name or code with partial matching
-   - **Updated Data Retrieval Tools**: get_cities() and get_airports() now return typed Pydantic models
-   - **Helper Functions**: Added get_city_by_id(), get_airport_by_code(), get_hotel_by_id() to sheets_client.py
-   - **Performance Optimization**: All search endpoints use batch-loading with O(1) dictionary lookups to avoid excessive HTTP requests
-   - **Field Descriptions**: All Pydantic models now have detailed field descriptions with format examples and guidance
+1. **Complete MCP Tools Refactoring** (Latest):
+   - **Tool Renaming & Simplification**:
+     * `get_cities()` → `list_cities()`
+     * `search_flights(request)` → `list_flights(origin_code, destination_code, date)` - simpler parameters
+     * `search_hotels()` removed - split into `list_hotels()` and `list_rooms()`
+     * `search_cars(request)` → `list_cars(city_id)` - simpler parameters
+     * `get_booking_details()` → `get_booking()`
+     * Removed: `get_airports()`, `search_airports()`, `get_user_bookings()`
+   
+   - **New Tools Created**:
+     * `list_hotels(city_id)` - List all hotels in a city with enriched data
+     * `list_rooms(hotel_id)` - List rooms with real availability calculation
+     * `cancel_booking(booking_id)` - Cancel bookings with automatic refund
+     * `update_passenger(passenger_id, updates)` - Update passenger details
+     * `test_tools()` - Comprehensive end-to-end testing
 
-2. **Complete Pydantic Type Safety Refactoring**:
-   - Added comprehensive input models: PassengerInput, FlightBookingInput, HotelBookingInput, CarBookingInput, PaymentInput
-   - Added search request models: FlightSearchRequest, HotelSearchRequest, CarSearchRequest
-   - Added response models: BookingResponse, FlightBookingSummary, HotelBookingSummary, CarBookingSummary, PaymentSummary
-   - Refactored all search endpoints to accept single Pydantic request objects and return typed model lists
-   - Completely refactored create_booking endpoint with robust validation:
-     * Requires at least one booking type (flight, hotel, or car)
-     * Validates flight passenger count >= 1 and matches passenger list length
-     * Validates hotel check-in < check-out date
-     * Validates car pickup < dropoff time
-   - Returns structured BookingResponse with all generated IDs and transaction details
-   - All endpoints now use Pydantic for automatic schema validation and type safety
+   - **Enhanced Pydantic Models**:
+     * Created AirportWithCity, HotelWithCity, RoomWithHotelInfo, CarWithCity
+     * All list tools now return proper typed Pydantic models (not raw dictionaries)
+     * Room availability now calculated based on future bookings
 
-2. **Standardized ID Format Implementation**:
-   - All primary keys now use prefix + zero-padded 4-digit format (e.g., FL0001, USR0001, BK0001)
-   - Added `generate_next_id()` function to sheets_client.py for auto-generating sequential IDs
-   - Updated populate_sheets.py to use new ID format for all sample data
-   - Modified create_booking endpoint to generate IDs using new format
-   - Updated frontend to use USR0001 as the current user
+   - **ID Generation Updates**:
+     * Extended `generate_next_id()` to accept optional `width` parameter
+     * Passenger IDs use width=5 (PA00001), all others use width=4
+     * Fixed row indexing bugs in cancel_booking and update_passenger
 
-3. Populated all Google Sheets tables with headers and sample data using new ID format
+   - **Performance & Usability**:
+     * All tools maintain batch-loading for O(1) lookups
+     * All responses include human-readable names (city names, airport names, hotel details)
+     * Simplified parameters for better frontend developer experience
 
-4. Created Python FastMCP backend with 9 tool endpoints:
-   - search_flights, search_hotels, search_cars
-   - create_booking
-   - get_cities, get_airports
-   - get_user_bookings, get_booking_details
-
-5. Built React frontend with tabbed interface for flights, hotels, and cars
-
-6. Implemented complete booking flow with passenger form and payment confirmation
-
-7. Configured workflows for backend (port 8000) and frontend (port 5000)
+2. **Previous Enhancements**:
+   - DateTime format documentation with ISO 8601 examples
+   - Complete Pydantic type safety for all endpoints
+   - Robust validation in create_booking (passenger count, date ranges)
+   - Performance optimization with batch-loading
+   - Helper functions in sheets_client.py
 
 8. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
 
