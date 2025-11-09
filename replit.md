@@ -74,28 +74,31 @@ A full-stack travel booking application that allows users to book flights, hotel
 - **Hotels**: Overlap detection for room bookings on specific dates
 - **Cars**: Time overlap detection for car rentals
 
-## MCP Tools (10 Total)
+## MCP Tools (11 Total)
 
 ### Discovery Tools (6 tools)
 1. **`list_cities()`** → Returns all cities with details
-2. **`list_airports(city_id)`** → Returns airports in a city with airport and city names
+2. **`list_airports(city_id?)`** → Returns airports, optionally filtered by city (returns ALL airports if no filter)
 3. **`list_flights(origin_code?, destination_code?, date?)`** → Returns flights with availability (all params optional - returns ALL flights if no filters)
 4. **`list_hotels(city?)`** → Returns hotels, optionally filtered by city name or ID (returns ALL hotels if no filter)
 5. **`list_rooms(hotel_id)`** → Returns rooms with real-time availability for a specific hotel
 6. **`list_cars(city?)`** → Returns cars, optionally filtered by city name or ID (returns ALL cars if no filter)
 
-### Booking Management Tools (4 tools)
-7. **`create_booking(request)`** → Creates a single master booking with optional flight/hotel/car bookings, passengers, and payment
-8. **`get_booking(booking_id)`** → Returns full booking details including all sub-bookings, passengers, and payment
-9. **`cancel_booking(booking_id)`** → Cancels a booking and automatically refunds payment
-10. **`update_passenger(passenger_id, updates)`** → Updates passenger information
+### Booking Management Tools (5 tools)
+7. **`create_booking(request)`** → Creates a booking with 'pending' status (payment is optional)
+8. **`process_payment(booking_id, payment)`** → Processes payment and confirms a pending booking
+9. **`get_booking(booking_id)`** → Returns full booking details including all sub-bookings, passengers, and payment
+10. **`cancel_booking(booking_id)`** → Cancels a booking and automatically refunds payment
+11. **`update_passenger(passenger_id, updates)`** → Updates passenger information
 
-### Typical Booking Workflow
+### Typical Booking Workflow (Two-Step Process)
 1. **Browse/Search** → Use `list_flights()`, `list_hotels()`, `list_cars()` (with or without filters) to view options
 2. **Select Items** → Note the IDs from search results (e.g., FL0001, HTL0001, CAR0001)
-3. **Create Booking** → Call `create_booking()` with the selected IDs, passenger details, and payment
-4. **Receive Confirmation** → Get booking_id, passenger_ids, and payment_id
-5. **Manage Booking** → Use `get_booking()`, `update_passenger()`, or `cancel_booking()` as needed
+3. **Create Booking** → Call `create_booking()` with selected IDs and passenger details (no payment)
+4. **Receive Pending Booking** → Get booking_id with status='pending'
+5. **Process Payment** → Call `process_payment(booking_id, payment)` to confirm booking
+6. **Receive Confirmation** → Booking status updates to 'confirmed', payment record created
+7. **Manage Booking** → Use `get_booking()`, `update_passenger()`, or `cancel_booking()` as needed
 
 ## Standardized ID Format
 
@@ -115,7 +118,38 @@ All entities use prefix + zero-padded digits:
 
 ## Recent Changes (November 9, 2025)
 
-1. **Major API Simplification & UX Improvements** (Latest):
+1. **Two-Step Booking Flow Implementation** (Latest - November 9, 2025):
+   - **Separated Payment from Booking**:
+     * Payment is now **optional** in `CreateBookingRequest` model
+     * `create_booking()` creates bookings with `'pending'` status by default
+     * Bookings no longer automatically create payment records
+   
+   - **New `process_payment()` Tool**:
+     * Added 11th MCP tool: `process_payment(booking_id, payment)`
+     * Accepts booking_id and PaymentInput (method, amount)
+     * Verifies payment amount matches booking total
+     * Updates booking status from `'pending'` to `'confirmed'`
+     * Creates Payment record with transaction reference
+   
+   - **Updated Booking Workflow**:
+     * Step 1: Create booking → Returns booking_id with 'pending' status
+     * Step 2: Process payment separately → Confirms booking
+     * Enables "create booking now, pay later" use cases
+   
+   - **Frontend FastMCP Integration**:
+     * Completely rebuilt frontend to use FastMCP HTTP transport
+     * Fixed MCP session initialization hanging issue
+     * initializeMCP() now returns immediately after receiving mcp-session-id header
+     * Implemented promise caching to prevent duplicate MCP handshakes
+     * Added CORS expose_headers for mcp-session-id to allow frontend access
+     * All API calls use structuredContent.result for direct object access
+   
+   - **Backend Improvements**:
+     * Made `list_airports()` city_id parameter optional (returns all airports if omitted)
+     * Fixed airport dropdown field name from `airport_name` to `name` in frontend
+     * CORS middleware properly exposes custom MCP headers
+
+2. **Major API Simplification & UX Improvements**:
    - **Optional Filtering for Browse/Search Tools**:
      * `list_flights()` - All parameters now optional (returns ALL flights if no filters)
      * `list_hotels()` - Accepts optional city name OR city ID (returns ALL hotels if omitted)

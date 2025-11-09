@@ -6,51 +6,44 @@ const API_URL = 'http://localhost:8000/mcp'
 let mcpSessionId = null
 let requestId = 0
 
+let initPromise = null
+
 const initializeMCP = async () => {
   if (mcpSessionId) return mcpSessionId
+  if (initPromise) return initPromise
   
-  console.log('Initializing MCP...')
-  
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream'
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'initialize',
-      params: {
-        protocolVersion: '2024-11-05',
-        capabilities: {},
-        clientInfo: {
-          name: 'travel-booking-client',
-          version: '1.0.0'
-        }
+  initPromise = (async () => {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream'
       },
-      id: ++requestId
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: {
+            name: 'travel-booking-client',
+            version: '1.0.0'
+          }
+        },
+        id: ++requestId
+      })
     })
-  })
-  
-  mcpSessionId = response.headers.get('mcp-session-id')
-  console.log('Got session ID:', mcpSessionId)
-  
-  if (!mcpSessionId) {
-    console.error('No session ID in response headers!')
-    for (const [key, value] of response.headers.entries()) {
-      console.log('Header:', key, '=', value)
+    
+    mcpSessionId = response.headers.get('mcp-session-id')
+    
+    if (!mcpSessionId) {
+      throw new Error('No mcp-session-id header received from server')
     }
-  }
+    
+    return mcpSessionId
+  })()
   
-  const contentType = response.headers.get('content-type')
-  if (contentType?.includes('text/event-stream')) {
-    await parseSSE(response)
-  } else {
-    await response.json()
-  }
-  
-  console.log('MCP initialized with session:', mcpSessionId)
-  return mcpSessionId
+  return initPromise
 }
 
 const parseSSE = async (response) => {
@@ -137,8 +130,6 @@ const parseSSE = async (response) => {
 const callTool = async (toolName, args = {}) => {
   await initializeMCP()
   
-  console.log('Calling tool:', toolName, 'with session:', mcpSessionId)
-  
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -156,8 +147,6 @@ const callTool = async (toolName, args = {}) => {
       id: ++requestId
     })
   })
-  
-  console.log('Response status:', response.status, response.statusText)
   
   if (!response.ok) {
     const text = await response.text()
@@ -230,15 +219,11 @@ function App() {
   const fetchCitiesAndAirports = async () => {
     try {
       const citiesResult = await callTool('list_cities')
-      console.log('Cities result:', citiesResult)
       const citiesData = citiesResult?.structuredContent?.result || (citiesResult?.content?.[0]?.text ? JSON.parse(citiesResult.content[0].text) : [])
-      console.log('Parsed cities data:', citiesData)
       setCities(citiesData)
 
       const airportsResult = await callTool('list_airports')
-      console.log('Airports result:', airportsResult)
       const airportsData = airportsResult?.structuredContent?.result || (airportsResult?.content?.[0]?.text ? JSON.parse(airportsResult.content[0].text) : [])
-      console.log('Parsed airports data:', airportsData)
       setAirports(airportsData)
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -451,11 +436,11 @@ function App() {
               <form onSubmit={searchFlights} className="search-form">
                 <select value={flightSearch.origin_code} onChange={(e) => setFlightSearch({...flightSearch, origin_code: e.target.value})}>
                   <option value="">Origin Airport (All)</option>
-                  {airports.map(a => <option key={a.code} value={a.code}>{a.airport_name} ({a.code})</option>)}
+                  {airports.map(a => <option key={a.code} value={a.code}>{a.name} ({a.code})</option>)}
                 </select>
                 <select value={flightSearch.destination_code} onChange={(e) => setFlightSearch({...flightSearch, destination_code: e.target.value})}>
                   <option value="">Destination Airport (All)</option>
-                  {airports.map(a => <option key={a.code} value={a.code}>{a.airport_name} ({a.code})</option>)}
+                  {airports.map(a => <option key={a.code} value={a.code}>{a.name} ({a.code})</option>)}
                 </select>
                 <input type="date" value={flightSearch.date} onChange={(e) => setFlightSearch({...flightSearch, date: e.target.value})} />
                 <button type="submit">Search Flights</button>
