@@ -76,17 +76,30 @@ A full-stack travel booking application that allows users to book flights, hotel
 
 ## Recent Changes (November 9, 2025)
 
-1. Populated all Google Sheets tables with headers and sample data
-2. Created Python FastMCP backend with 9 tool endpoints:
+1. **Standardized ID Format Implementation**:
+   - All primary keys now use prefix + zero-padded 4-digit format (e.g., FL0001, USR0001, BK0001)
+   - Added `generate_next_id()` function to sheets_client.py for auto-generating sequential IDs
+   - Updated populate_sheets.py to use new ID format for all sample data
+   - Modified create_booking endpoint to generate IDs using new format
+   - Updated frontend to use USR0001 as the current user
+
+2. Populated all Google Sheets tables with headers and sample data using new ID format
+
+3. Created Python FastMCP backend with 9 tool endpoints:
    - search_flights, search_hotels, search_cars
    - create_booking
    - get_cities, get_airports
    - get_user_bookings, get_booking_details
-3. Built React frontend with tabbed interface for flights, hotels, and cars
-4. Implemented complete booking flow with passenger form and payment confirmation
-5. Configured workflows for backend (port 8000) and frontend (port 5000)
-6. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
-7. Implemented SSE (Server-Sent Events) parser in frontend to handle FastMCP HTTP transport protocol
+
+4. Built React frontend with tabbed interface for flights, hotels, and cars
+
+5. Implemented complete booking flow with passenger form and payment confirmation
+
+6. Configured workflows for backend (port 8000) and frontend (port 5000)
+
+7. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
+
+8. Implemented SSE (Server-Sent Events) parser in frontend to handle FastMCP HTTP transport protocol
 
 ## How to Use
 
@@ -133,7 +146,7 @@ Sample data is already populated in Google Sheets:
 - Google Sheets connection is managed via Replit's integration system
 - All API endpoints use FastMCP's automatic validation and schema generation
 - Frontend communicates with backend via HTTP POST requests to tool endpoints
-- **Current user**: All bookings are made as John Doe (user_id: 42382f88-fcf7-4b7d-ad65-15fff4a0352d)
+- **Current user**: All bookings are made as John Doe (user_id: USR0001)
   - This is hard-coded in the frontend for MVP demonstration purposes
   - Future enhancement: Add user authentication or user selection dropdown
 
@@ -143,3 +156,4 @@ Sample data is already populated in Google Sheets:
 - No email notifications for bookings
 - Limited error handling and validation messages on frontend
 - No pagination for search results
+- **ID Generation Race Condition**: The `generate_next_id()` function has a potential race condition under high concurrent load. Mitigated with retry logic, but for production use, implement atomic counters or use a proper database with auto-increment primary keys

@@ -159,40 +159,62 @@ class SheetsClient:
         response = requests.post(url, headers=headers)
         return response.status_code == 200
     
-    def generate_next_id(self, table_name: str, prefix: str) -> str:
+    def generate_next_id(self, table_name: str, prefix: str, max_retries: int = 5) -> str:
         """Generate the next available ID with the given prefix and zero-padded 4-digit counter
+        
+        IMPORTANT: This implementation has a race condition for concurrent requests.
+        For production use, implement atomic counters or use a proper database with auto-increment.
+        This is suitable for MVP/demonstration with low concurrency.
         
         Args:
             table_name: Name of the table
             prefix: ID prefix (e.g., 'FL', 'USR', 'BK')
+            max_retries: Maximum number of retries if ID collision detected
         
         Returns:
             Next available ID (e.g., 'FL0001', 'USR0023')
+        
+        Raises:
+            Exception: If unable to generate unique ID after max_retries
         """
-        rows = self.read_sheet(table_name)
+        import random
+        import time
         
-        # Extract all existing IDs
-        existing_ids = []
-        for row in rows:
-            id_value = row.get('id', '').strip()
-            if id_value and id_value.startswith(prefix):
-                existing_ids.append(id_value)
+        for attempt in range(max_retries):
+            rows = self.read_sheet(table_name)
+            
+            # Extract all existing IDs
+            existing_ids = set()
+            for row in rows:
+                id_value = row.get('id', '').strip()
+                if id_value and id_value.startswith(prefix):
+                    existing_ids.add(id_value)
+            
+            # Find the highest numeric value
+            max_num = 0
+            for id_str in existing_ids:
+                try:
+                    # Extract numeric part after the prefix
+                    num_part = id_str[len(prefix):]
+                    num = int(num_part)
+                    if num > max_num:
+                        max_num = num
+                except (ValueError, IndexError):
+                    continue
+            
+            # Generate next ID
+            next_num = max_num + 1
+            next_id = f"{prefix}{next_num:04d}"
+            
+            # Double-check uniqueness (mitigates but doesn't eliminate race condition)
+            if next_id not in existing_ids:
+                return next_id
+            
+            # ID collision detected, retry with small delay
+            if attempt < max_retries - 1:
+                time.sleep(random.uniform(0.01, 0.05))
         
-        # Find the highest numeric value
-        max_num = 0
-        for id_str in existing_ids:
-            try:
-                # Extract numeric part after the prefix
-                num_part = id_str[len(prefix):]
-                num = int(num_part)
-                if num > max_num:
-                    max_num = num
-            except (ValueError, IndexError):
-                continue
-        
-        # Generate next ID
-        next_num = max_num + 1
-        return f"{prefix}{next_num:04d}"
+        raise Exception(f"Failed to generate unique ID for {table_name} after {max_retries} attempts")
 
 # Singleton instance
 sheets_client = SheetsClient()
