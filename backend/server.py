@@ -22,12 +22,13 @@ mcp = FastMCP("Travel Booking API")
 def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]:
     """
     Search for available flights between origin and destination on a specific date.
+    Returns flights with airport names and city names for easy understanding.
     
     Args:
         request: Flight search criteria with origin, destination, date, and seat class
     
     Returns:
-        List of available flights with seat availability
+        List of available flights with seat availability and human-readable location info
     """
     flights_data = sheets_client.read_sheet('Flight')
     flight_bookings = sheets_client.read_sheet('FlightBooking')
@@ -51,7 +52,15 @@ def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]
                 )
                 available_seats = 200 - total_bookings  # Assuming 200 seats per flight
                 
-                # Convert to typed model
+                # Get origin airport and city info
+                origin_airport = sheets_client.get_airport_by_code(flight_row['origin_code'])
+                origin_city = sheets_client.get_city_by_id(origin_airport['city_id']) if origin_airport else None
+                
+                # Get destination airport and city info
+                dest_airport = sheets_client.get_airport_by_code(flight_row['destination_code'])
+                dest_city = sheets_client.get_city_by_id(dest_airport['city_id']) if dest_airport else None
+                
+                # Convert to typed model with human-readable names
                 flight = FlightWithAvailability(
                     id=flight_row['id'],
                     flight_number=flight_row['flight_number'],
@@ -62,7 +71,11 @@ def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]
                     departure_time=datetime.fromisoformat(flight_row['departure_time']),
                     arrival_time=datetime.fromisoformat(flight_row['arrival_time']),
                     base_price=float(flight_row['base_price']),
-                    available_seats=available_seats
+                    available_seats=available_seats,
+                    origin_airport_name=origin_airport.get('name', '') if origin_airport else '',
+                    origin_city_name=origin_city.get('name', '') if origin_city else '',
+                    destination_airport_name=dest_airport.get('name', '') if dest_airport else '',
+                    destination_city_name=dest_city.get('name', '') if dest_city else ''
                 )
                 results.append(flight)
     
@@ -72,12 +85,13 @@ def search_flights(request: FlightSearchRequest) -> List[FlightWithAvailability]
 def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
     """
     Search for available hotels and rooms in a city for specific dates.
+    Returns rooms with full hotel details including address, rating, and city name.
     
     Args:
         request: Hotel search criteria with city_id, check-in/out dates, and guests
     
     Returns:
-        List of available rooms with hotel details
+        List of available rooms with complete hotel information
     """
     hotels_data = sheets_client.read_sheet('Hotel')
     rooms_data = sheets_client.read_sheet('Room')
@@ -88,6 +102,10 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
     for hotel in hotels_data:
         if hotel.get('city_id') != request.city_id:
             continue
+        
+        # Get city name for this hotel
+        city = sheets_client.get_city_by_id(hotel.get('city_id', ''))
+        city_name = city.get('name', '') if city else ''
         
         for room in rooms_data:
             if room.get('hotel_id') != hotel.get('id'):
@@ -111,7 +129,7 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
                     break
             
             if is_available:
-                # Convert to typed model
+                # Convert to typed model with full hotel details
                 room_model = RoomWithAvailability(
                     id=room['id'],
                     hotel_id=room['hotel_id'],
@@ -119,7 +137,10 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
                     capacity=int(room['capacity']),
                     price_per_night=float(room['price_per_night']),
                     available=True,
-                    hotel_name=hotel.get('name', '')
+                    hotel_name=hotel.get('name', ''),
+                    hotel_address=hotel.get('address', ''),
+                    hotel_rating=float(hotel.get('rating', 0)),
+                    city_name=city_name
                 )
                 results.append(room_model)
     
@@ -129,12 +150,13 @@ def search_hotels(request: HotelSearchRequest) -> List[RoomWithAvailability]:
 def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
     """
     Search for available rental cars in a city for specific dates.
+    Returns cars with city name for better context.
     
     Args:
         request: Car search criteria with city_id and pickup/dropoff dates
     
     Returns:
-        List of available cars
+        List of available cars with city information
     """
     cars_data = sheets_client.read_sheet('Car')
     car_bookings = sheets_client.read_sheet('CarBooking')
@@ -148,6 +170,10 @@ def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
     for car in cars_data:
         if car.get('city_id') != request.city_id:
             continue
+        
+        # Get city name for this car
+        city = sheets_client.get_city_by_id(car.get('city_id', ''))
+        city_name = city.get('name', '') if city else ''
         
         # Check if car is available (no overlapping bookings)
         is_available = True
@@ -164,7 +190,7 @@ def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
                 break
         
         if is_available:
-            # Convert to typed model
+            # Convert to typed model with city name
             car_model = CarWithAvailability(
                 id=car['id'],
                 city_id=car['city_id'],
@@ -175,11 +201,78 @@ def search_cars(request: CarSearchRequest) -> List[CarWithAvailability]:
                 transmission=car['transmission'],
                 fuel_type=car['fuel_type'],
                 price_per_day=float(car['price_per_day']),
-                available=True
+                available=True,
+                city_name=city_name
             )
             results.append(car_model)
     
     return results
+
+# ===== AIRPORT HELPER TOOLS =====
+
+@mcp.tool()
+def get_airports_by_city(city_id: str) -> List[Airport]:
+    """
+    Get all airports in a specific city.
+    Helps users find airport codes when they know the city.
+    
+    Args:
+        city_id: ID of the city (e.g., CY0001)
+    
+    Returns:
+        List of airports in that city with codes and names
+    """
+    airports = sheets_client.read_sheet('Airport')
+    city_airports = [
+        Airport(
+            code=a['code'],
+            name=a['name'],
+            city_id=a['city_id']
+        )
+        for a in airports if a.get('city_id') == city_id
+    ]
+    return city_airports
+
+@mcp.tool()
+def search_airports(search_term: str = "") -> List[Airport]:
+    """
+    Search airports by name, code, or list all if no search term provided.
+    Helps users find airport codes and information.
+    
+    Args:
+        search_term: Optional search string to filter airports (matches name or code)
+    
+    Returns:
+        List of matching airports with codes and names
+    """
+    airports = sheets_client.read_sheet('Airport')
+    
+    if not search_term:
+        # Return all airports
+        return [
+            Airport(
+                code=a['code'],
+                name=a['name'],
+                city_id=a['city_id']
+            )
+            for a in airports if a.get('code')
+        ]
+    
+    # Filter by search term (case-insensitive partial match on name or code)
+    search_lower = search_term.lower()
+    matching = [
+        Airport(
+            code=a['code'],
+            name=a['name'],
+            city_id=a['city_id']
+        )
+        for a in airports
+        if (a.get('code') and (
+            search_lower in a.get('code', '').lower() or
+            search_lower in a.get('name', '').lower()
+        ))
+    ]
+    return matching
 
 # ===== BOOKING ENDPOINTS =====
 
@@ -348,14 +441,43 @@ def create_booking(request: CreateBookingRequest) -> BookingResponse:
 # ===== DATA RETRIEVAL ENDPOINTS =====
 
 @mcp.tool()
-def get_cities() -> List[dict]:
-    """Get all available cities"""
-    return sheets_client.read_sheet('City')
+def get_cities() -> List[City]:
+    """
+    Get all available cities in the travel booking system.
+    Returns city names, countries, and IDs for booking reference.
+    
+    Returns:
+        List of all cities with their details
+    """
+    cities = sheets_client.read_sheet('City')
+    return [
+        City(
+            id=c['id'],
+            name=c['name'],
+            country=c['country'],
+            region=c['region']
+        )
+        for c in cities if c.get('id')
+    ]
 
 @mcp.tool()
-def get_airports() -> List[dict]:
-    """Get all available airports"""
-    return sheets_client.read_sheet('Airport')
+def get_airports() -> List[Airport]:
+    """
+    Get all available airports in the travel booking system.
+    Use this to find airport codes needed for flight searches.
+    
+    Returns:
+        List of all airports with codes, names, and city information
+    """
+    airports = sheets_client.read_sheet('Airport')
+    return [
+        Airport(
+            code=a['code'],
+            name=a['name'],
+            city_id=a['city_id']
+        )
+        for a in airports if a.get('code')
+    ]
 
 @mcp.tool()
 def get_user_bookings(user_id: str) -> List[dict]:

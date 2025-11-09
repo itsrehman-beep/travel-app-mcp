@@ -1,7 +1,19 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Literal
 from datetime import datetime, date
 from uuid import UUID
+
+# Custom validators for datetime formats
+class DateTimeFormat(BaseModel):
+    """
+    Helper model for datetime validation.
+    All datetime fields accept ISO 8601 format: YYYY-MM-DDTHH:MM:SS
+    All date fields accept format: YYYY-MM-DD
+    Examples:
+        - datetime: "2025-11-09T14:30:00"
+        - date: "2025-11-09"
+    """
+    pass
 
 # ===== USERS & AUTH =====
 class User(BaseModel):
@@ -180,14 +192,25 @@ class CreateBookingRequest(BaseModel):
     payment: PaymentInput
 
 class FlightWithAvailability(Flight):
+    """Flight search result with availability and human-readable location names"""
     available_seats: int
+    origin_airport_name: str = Field(description="Name of departure airport")
+    origin_city_name: str = Field(description="Name of departure city")
+    destination_airport_name: str = Field(description="Name of arrival airport")
+    destination_city_name: str = Field(description="Name of arrival city")
 
 class RoomWithAvailability(Room):
+    """Hotel room search result with availability and full hotel details"""
     available: bool
-    hotel_name: str
+    hotel_name: str = Field(description="Name of the hotel")
+    hotel_address: str = Field(description="Full address of the hotel")
+    hotel_rating: float = Field(description="Hotel rating (0-5 stars)")
+    city_name: str = Field(description="Name of the city where hotel is located")
 
 class CarWithAvailability(Car):
+    """Car rental search result with availability and location details"""
     available: bool
+    city_name: str = Field(description="Name of the city where car is available")
 
 # ===== BOOKING RESPONSE MODELS =====
 class FlightBookingSummary(BaseModel):

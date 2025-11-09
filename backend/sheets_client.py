@@ -142,6 +142,21 @@ class SheetsClient:
                 return (idx + 2, row)  # +2 because of header row and 1-indexing
         return None
     
+    def get_city_by_id(self, city_id: str) -> Optional[Dict[str, Any]]:
+        """Get city information by ID"""
+        result = self.find_row_by_id('City', city_id)
+        return result[1] if result else None
+    
+    def get_airport_by_code(self, airport_code: str) -> Optional[Dict[str, Any]]:
+        """Get airport information by code"""
+        result = self.find_row_by_id('Airport', airport_code)
+        return result[1] if result else None
+    
+    def get_hotel_by_id(self, hotel_id: str) -> Optional[Dict[str, Any]]:
+        """Get hotel information by ID"""
+        result = self.find_row_by_id('Hotel', hotel_id)
+        return result[1] if result else None
+    
     def delete_row(self, table_name: str, row_index: int) -> bool:
         """Delete a row by clearing its values"""
         sheet_name = self.SHEET_NAMES.get(table_name)
