@@ -9,6 +9,8 @@ let requestId = 0
 const initializeMCP = async () => {
   if (mcpSessionId) return mcpSessionId
   
+  console.log('Initializing MCP...')
+  
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -31,6 +33,14 @@ const initializeMCP = async () => {
   })
   
   mcpSessionId = response.headers.get('mcp-session-id')
+  console.log('Got session ID:', mcpSessionId)
+  
+  if (!mcpSessionId) {
+    console.error('No session ID in response headers!')
+    for (const [key, value] of response.headers.entries()) {
+      console.log('Header:', key, '=', value)
+    }
+  }
   
   const contentType = response.headers.get('content-type')
   if (contentType?.includes('text/event-stream')) {
@@ -39,6 +49,7 @@ const initializeMCP = async () => {
     await response.json()
   }
   
+  console.log('MCP initialized with session:', mcpSessionId)
   return mcpSessionId
 }
 
@@ -126,6 +137,8 @@ const parseSSE = async (response) => {
 const callTool = async (toolName, args = {}) => {
   await initializeMCP()
   
+  console.log('Calling tool:', toolName, 'with session:', mcpSessionId)
+  
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -143,6 +156,14 @@ const callTool = async (toolName, args = {}) => {
       id: ++requestId
     })
   })
+  
+  console.log('Response status:', response.status, response.statusText)
+  
+  if (!response.ok) {
+    const text = await response.text()
+    console.error('Error response:', text)
+    throw new Error(`API error: ${response.status} ${response.statusText}`)
+  }
   
   const contentType = response.headers.get('content-type')
   
@@ -165,31 +186,30 @@ function App() {
   const [flightSearch, setFlightSearch] = useState({
     origin_code: '',
     destination_code: '',
-    departure_date: '',
-    seat_class: 'economy'
+    date: ''
   })
   const [flightResults, setFlightResults] = useState([])
+  const [selectedFlight, setSelectedFlight] = useState(null)
+  const [seatClass, setSeatClass] = useState('economy')
   
   const [hotelSearch, setHotelSearch] = useState({
-    city_id: '',
+    city: '',
     check_in: '',
     check_out: '',
     guests: 1
   })
-  const [hotelResults, setHotelResults] = useState([])
+  const [hotels, setHotels] = useState([])
+  const [selectedHotel, setSelectedHotel] = useState(null)
+  const [rooms, setRooms] = useState([])
+  const [selectedRoom, setSelectedRoom] = useState(null)
   
   const [carSearch, setCarSearch] = useState({
-    city_id: '',
+    city: '',
     pickup_date: '',
     dropoff_date: ''
   })
   const [carResults, setCarResults] = useState([])
-  
-  const [selectedBookings, setSelectedBookings] = useState({
-    flight: null,
-    hotel: null,
-    car: null
-  })
+  const [selectedCar, setSelectedCar] = useState(null)
   
   const [showBookingForm, setShowBookingForm] = useState(false)
   const [passengers, setPassengers] = useState([{
@@ -199,6 +219,9 @@ function App() {
     dob: '',
     passport_no: ''
   }])
+  
+  const [pendingBooking, setPendingBooking] = useState(null)
+  const [paymentMethod, setPaymentMethod] = useState('card')
 
   useEffect(() => {
     fetchCitiesAndAirports()
@@ -206,63 +229,87 @@ function App() {
 
   const fetchCitiesAndAirports = async () => {
     try {
-      const citiesResult = await callTool('get_cities')
-      if (citiesResult?.content?.[0]?.text) {
-        setCities(JSON.parse(citiesResult.content[0].text))
-      }
+      const citiesResult = await callTool('list_cities')
+      console.log('Cities result:', citiesResult)
+      const citiesData = citiesResult?.structuredContent?.result || (citiesResult?.content?.[0]?.text ? JSON.parse(citiesResult.content[0].text) : [])
+      console.log('Parsed cities data:', citiesData)
+      setCities(citiesData)
 
-      const airportsResult = await callTool('get_airports')
-      if (airportsResult?.content?.[0]?.text) {
-        setAirports(JSON.parse(airportsResult.content[0].text))
-      }
+      const airportsResult = await callTool('list_airports')
+      console.log('Airports result:', airportsResult)
+      const airportsData = airportsResult?.structuredContent?.result || (airportsResult?.content?.[0]?.text ? JSON.parse(airportsResult.content[0].text) : [])
+      console.log('Parsed airports data:', airportsData)
+      setAirports(airportsData)
     } catch (error) {
       console.error('Error fetching data:', error)
+      alert('Failed to load cities and airports: ' + error.message)
     }
   }
 
   const searchFlights = async (e) => {
     e.preventDefault()
     try {
-      const result = await callTool('search_flights', flightSearch)
-      if (result?.content?.[0]?.text) {
-        setFlightResults(JSON.parse(result.content[0].text))
-      }
+      const params = {}
+      if (flightSearch.origin_code) params.origin_code = flightSearch.origin_code
+      if (flightSearch.destination_code) params.destination_code = flightSearch.destination_code
+      if (flightSearch.date) params.date = flightSearch.date
+      
+      const result = await callTool('list_flights', params)
+      const flightsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
+      setFlightResults(flightsData)
     } catch (error) {
       console.error('Error searching flights:', error)
+      alert('Error searching flights: ' + error.message)
     }
   }
 
   const searchHotels = async (e) => {
     e.preventDefault()
     try {
-      const result = await callTool('search_hotels', hotelSearch)
-      if (result?.content?.[0]?.text) {
-        setHotelResults(JSON.parse(result.content[0].text))
-      }
+      const params = hotelSearch.city ? { city: hotelSearch.city } : {}
+      const result = await callTool('list_hotels', params)
+      const hotelsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
+      setHotels(hotelsData)
+      setRooms([])
+      setSelectedRoom(null)
     } catch (error) {
       console.error('Error searching hotels:', error)
+      alert('Error searching hotels: ' + error.message)
+    }
+  }
+
+  const fetchRooms = async (hotelId, hotelName) => {
+    try {
+      const result = await callTool('list_rooms', { hotel_id: hotelId })
+      const roomsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
+      setRooms(roomsData)
+      setSelectedHotel({ id: hotelId, name: hotelName })
+    } catch (error) {
+      console.error('Error fetching rooms:', error)
+      alert('Error fetching rooms: ' + error.message)
     }
   }
 
   const searchCars = async (e) => {
     e.preventDefault()
     try {
-      const result = await callTool('search_cars', carSearch)
-      if (result?.content?.[0]?.text) {
-        setCarResults(JSON.parse(result.content[0].text))
-      }
+      const params = carSearch.city ? { city: carSearch.city } : {}
+      const result = await callTool('list_cars', params)
+      const carsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
+      setCarResults(carsData)
     } catch (error) {
       console.error('Error searching cars:', error)
+      alert('Error searching cars: ' + error.message)
     }
   }
 
-  const selectItem = (type, item) => {
-    setSelectedBookings(prev => ({ ...prev, [type]: item }))
-  }
-
   const proceedToBooking = () => {
-    if (!selectedBookings.flight && !selectedBookings.hotel && !selectedBookings.car) {
+    if (!selectedFlight && !selectedRoom && !selectedCar) {
       alert('Please select at least one item to book')
+      return
+    }
+    if (selectedFlight && passengers.length === 0) {
+      alert('Please add at least one passenger for flight booking')
       return
     }
     setShowBookingForm(true)
@@ -271,47 +318,109 @@ function App() {
   const createBooking = async (e) => {
     e.preventDefault()
     
-    const totalAmount = (
-      (selectedBookings.flight ? parseFloat(selectedBookings.flight.base_price) * passengers.length : 0) +
-      (selectedBookings.hotel ? parseFloat(selectedBookings.hotel.price_per_night) * 
-        Math.ceil((new Date(hotelSearch.check_out) - new Date(hotelSearch.check_in)) / (1000 * 60 * 60 * 24)) : 0) +
-      (selectedBookings.car ? parseFloat(selectedBookings.car.price_per_day) * 
-        Math.ceil((new Date(carSearch.dropoff_date) - new Date(carSearch.pickup_date)) / (1000 * 60 * 60 * 24)) : 0)
-    )
+    if (!selectedFlight && !selectedRoom && !selectedCar) {
+      alert('No items selected')
+      return
+    }
 
     const bookingData = {
       user_id: 'USR0001',
-      flight_id: selectedBookings.flight?.id,
-      flight_seat_class: flightSearch.seat_class,
-      flight_passengers: passengers.length,
-      room_id: selectedBookings.hotel?.id,
-      check_in: hotelSearch.check_in,
-      check_out: hotelSearch.check_out,
-      hotel_guests: hotelSearch.guests,
-      car_id: selectedBookings.car?.id,
-      pickup_time: carSearch.pickup_date + 'T10:00:00',
-      dropoff_time: carSearch.dropoff_date + 'T10:00:00',
-      pickup_location: 'Airport',
-      dropoff_location: 'Hotel',
-      passengers_json: JSON.stringify(passengers),
-      payment_method: 'card',
-      total_amount: totalAmount
+      passengers: passengers.map(p => ({
+        first_name: p.first_name,
+        last_name: p.last_name,
+        gender: p.gender,
+        dob: p.dob,
+        passport_no: p.passport_no
+      }))
+    }
+
+    if (selectedFlight) {
+      bookingData.flight_booking = {
+        flight_id: selectedFlight.id,
+        seat_class: seatClass,
+        passengers: passengers.length
+      }
+    }
+
+    if (selectedRoom) {
+      bookingData.hotel_booking = {
+        room_id: selectedRoom.id,
+        check_in: hotelSearch.check_in,
+        check_out: hotelSearch.check_out,
+        guests: hotelSearch.guests
+      }
+    }
+
+    if (selectedCar) {
+      bookingData.car_booking = {
+        car_id: selectedCar.id,
+        pickup_time: carSearch.pickup_date + 'T10:00:00',
+        dropoff_time: carSearch.dropoff_date + 'T18:00:00',
+        pickup_location: 'Airport',
+        dropoff_location: 'Hotel'
+      }
     }
 
     try {
       const result = await callTool('create_booking', bookingData)
-      if (result?.content?.[0]?.text) {
-        const bookingResult = JSON.parse(result.content[0].text)
-        alert(`Booking confirmed! Booking ID: ${bookingResult.booking_id}`)
-        setShowBookingForm(false)
-        setSelectedBookings({ flight: null, hotel: null, car: null })
-        setFlightResults([])
-        setHotelResults([])
-        setCarResults([])
+      const bookingResponse = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result)
+      
+      if (bookingResponse && bookingResponse.booking_id) {
+        setPendingBooking(bookingResponse)
+        alert(`Booking created! Booking ID: ${bookingResponse.booking_id}\nStatus: ${bookingResponse.status}\nTotal: $${bookingResponse.total_amount}\n\nPlease proceed to payment.`)
+      } else {
+        alert('Booking created but no booking ID received')
       }
     } catch (error) {
       console.error('Error creating booking:', error)
       alert('Error creating booking: ' + error.message)
+    }
+  }
+
+  const processPayment = async (e) => {
+    e.preventDefault()
+    
+    if (!pendingBooking) {
+      alert('No pending booking found')
+      return
+    }
+
+    try {
+      const result = await callTool('process_payment', {
+        booking_id: pendingBooking.booking_id,
+        payment: {
+          method: paymentMethod,
+          amount: pendingBooking.total_amount
+        }
+      })
+      
+      const paymentResponse = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result)
+      
+      if (paymentResponse && paymentResponse.success) {
+        alert(`Payment successful!\n\nBooking ID: ${paymentResponse.booking_id}\nPayment ID: ${paymentResponse.payment_id}\nTransaction Ref: ${paymentResponse.transaction_ref}\nStatus: ${paymentResponse.booking_status}`)
+        
+        setShowBookingForm(false)
+        setPendingBooking(null)
+        setSelectedFlight(null)
+        setSelectedRoom(null)
+        setSelectedCar(null)
+        setFlightResults([])
+        setHotels([])
+        setRooms([])
+        setCarResults([])
+        setPassengers([{
+          first_name: '',
+          last_name: '',
+          gender: '',
+          dob: '',
+          passport_no: ''
+        }])
+      } else {
+        alert('Payment failed: ' + (paymentResponse?.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error)
+      alert('Error processing payment: ' + error.message)
     }
   }
 
@@ -340,37 +449,44 @@ function App() {
             <div className="search-section">
               <h2>Search Flights</h2>
               <form onSubmit={searchFlights} className="search-form">
-                <select value={flightSearch.origin_code} onChange={(e) => setFlightSearch({...flightSearch, origin_code: e.target.value})} required>
-                  <option value="">Origin Airport</option>
-                  {airports.map(a => <option key={a.code} value={a.code}>{a.name} ({a.code})</option>)}
+                <select value={flightSearch.origin_code} onChange={(e) => setFlightSearch({...flightSearch, origin_code: e.target.value})}>
+                  <option value="">Origin Airport (All)</option>
+                  {airports.map(a => <option key={a.code} value={a.code}>{a.airport_name} ({a.code})</option>)}
                 </select>
-                <select value={flightSearch.destination_code} onChange={(e) => setFlightSearch({...flightSearch, destination_code: e.target.value})} required>
-                  <option value="">Destination Airport</option>
-                  {airports.map(a => <option key={a.code} value={a.code}>{a.name} ({a.code})</option>)}
+                <select value={flightSearch.destination_code} onChange={(e) => setFlightSearch({...flightSearch, destination_code: e.target.value})}>
+                  <option value="">Destination Airport (All)</option>
+                  {airports.map(a => <option key={a.code} value={a.code}>{a.airport_name} ({a.code})</option>)}
                 </select>
-                <input type="date" value={flightSearch.departure_date} onChange={(e) => setFlightSearch({...flightSearch, departure_date: e.target.value})} required />
-                <select value={flightSearch.seat_class} onChange={(e) => setFlightSearch({...flightSearch, seat_class: e.target.value})}>
-                  <option value="economy">Economy</option>
-                  <option value="business">Business</option>
-                </select>
+                <input type="date" value={flightSearch.date} onChange={(e) => setFlightSearch({...flightSearch, date: e.target.value})} />
                 <button type="submit">Search Flights</button>
               </form>
               
               <div className="results">
                 {flightResults.map(flight => (
-                  <div key={flight.id} className={`result-card ${selectedBookings.flight?.id === flight.id ? 'selected' : ''}`}>
+                  <div key={flight.id} className={`result-card ${selectedFlight?.id === flight.id ? 'selected' : ''}`}>
                     <h3>{flight.airline_name} - {flight.flight_number}</h3>
-                    <p>{flight.origin_code} → {flight.destination_code}</p>
+                    <p>{flight.origin_name} ({flight.origin_code}) → {flight.destination_name} ({flight.destination_code})</p>
                     <p>Aircraft: {flight.aircraft_model}</p>
                     <p>Departure: {new Date(flight.departure_time).toLocaleString()}</p>
+                    <p>Arrival: {new Date(flight.arrival_time).toLocaleString()}</p>
                     <p>Available Seats: {flight.available_seats}</p>
-                    <p className="price">${flight.base_price}</p>
-                    <button onClick={() => selectItem('flight', flight)}>
-                      {selectedBookings.flight?.id === flight.id ? 'Selected' : 'Select'}
+                    <p className="price">${flight.base_price} per passenger</p>
+                    <button onClick={() => setSelectedFlight(flight)}>
+                      {selectedFlight?.id === flight.id ? 'Selected' : 'Select'}
                     </button>
                   </div>
                 ))}
               </div>
+              
+              {selectedFlight && (
+                <div className="seat-class-selector">
+                  <label>Seat Class: </label>
+                  <select value={seatClass} onChange={(e) => setSeatClass(e.target.value)}>
+                    <option value="economy">Economy</option>
+                    <option value="business">Business</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -378,31 +494,47 @@ function App() {
             <div className="search-section">
               <h2>Search Hotels</h2>
               <form onSubmit={searchHotels} className="search-form">
-                <select value={hotelSearch.city_id} onChange={(e) => setHotelSearch({...hotelSearch, city_id: e.target.value})} required>
-                  <option value="">Select City</option>
-                  {cities.map(c => <option key={c.id} value={c.id}>{c.name}, {c.country}</option>)}
+                <select value={hotelSearch.city} onChange={(e) => setHotelSearch({...hotelSearch, city: e.target.value})}>
+                  <option value="">Select City (All)</option>
+                  {cities.map(c => <option key={c.id} value={c.name}>{c.name}, {c.country}</option>)}
                 </select>
-                <input type="date" value={hotelSearch.check_in} onChange={(e) => setHotelSearch({...hotelSearch, check_in: e.target.value})} required />
-                <input type="date" value={hotelSearch.check_out} onChange={(e) => setHotelSearch({...hotelSearch, check_out: e.target.value})} required />
-                <input type="number" value={hotelSearch.guests} onChange={(e) => setHotelSearch({...hotelSearch, guests: parseInt(e.target.value)})} min="1" required />
+                <input type="date" placeholder="Check-in" value={hotelSearch.check_in} onChange={(e) => setHotelSearch({...hotelSearch, check_in: e.target.value})} />
+                <input type="date" placeholder="Check-out" value={hotelSearch.check_out} onChange={(e) => setHotelSearch({...hotelSearch, check_out: e.target.value})} />
+                <input type="number" placeholder="Guests" value={hotelSearch.guests} onChange={(e) => setHotelSearch({...hotelSearch, guests: parseInt(e.target.value)})} min="1" />
                 <button type="submit">Search Hotels</button>
               </form>
               
               <div className="results">
-                {hotelResults.map(room => (
-                  <div key={room.id} className={`result-card ${selectedBookings.hotel?.id === room.id ? 'selected' : ''}`}>
-                    <h3>{room.hotel_name}</h3>
-                    <p>Room Type: {room.room_type}</p>
-                    <p>Capacity: {room.capacity} guests</p>
-                    <p>Rating: {room.hotel_rating}</p>
-                    <p>{room.hotel_address}</p>
-                    <p className="price">${room.price_per_night}/night</p>
-                    <button onClick={() => selectItem('hotel', room)}>
-                      {selectedBookings.hotel?.id === room.id ? 'Selected' : 'Select'}
-                    </button>
+                {hotels.map(hotel => (
+                  <div key={hotel.id} className="result-card">
+                    <h3>{hotel.name}</h3>
+                    <p>City: {hotel.city_name}</p>
+                    <p>Rating: {'⭐'.repeat(Math.round(hotel.rating))}</p>
+                    <p>{hotel.address}</p>
+                    <button onClick={() => fetchRooms(hotel.id, hotel.name)}>View Rooms</button>
                   </div>
                 ))}
               </div>
+              
+              {selectedHotel && rooms.length > 0 && (
+                <>
+                  <h3>Rooms at {selectedHotel.name}</h3>
+                  <div className="results">
+                    {rooms.map(room => (
+                      <div key={room.id} className={`result-card ${selectedRoom?.id === room.id ? 'selected' : ''}`}>
+                        <h4>{room.room_type}</h4>
+                        <p>Hotel: {room.hotel_name}</p>
+                        <p>Capacity: {room.capacity} guests</p>
+                        <p>Available: {room.is_available ? 'Yes' : 'No'}</p>
+                        <p className="price">${room.price_per_night}/night</p>
+                        <button onClick={() => setSelectedRoom(room)} disabled={!room.is_available}>
+                          {selectedRoom?.id === room.id ? 'Selected' : room.is_available ? 'Select' : 'Unavailable'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -410,26 +542,27 @@ function App() {
             <div className="search-section">
               <h2>Search Cars</h2>
               <form onSubmit={searchCars} className="search-form">
-                <select value={carSearch.city_id} onChange={(e) => setCarSearch({...carSearch, city_id: e.target.value})} required>
-                  <option value="">Select City</option>
-                  {cities.map(c => <option key={c.id} value={c.id}>{c.name}, {c.country}</option>)}
+                <select value={carSearch.city} onChange={(e) => setCarSearch({...carSearch, city: e.target.value})}>
+                  <option value="">Select City (All)</option>
+                  {cities.map(c => <option key={c.id} value={c.name}>{c.name}, {c.country}</option>)}
                 </select>
-                <input type="date" value={carSearch.pickup_date} onChange={(e) => setCarSearch({...carSearch, pickup_date: e.target.value})} required />
-                <input type="date" value={carSearch.dropoff_date} onChange={(e) => setCarSearch({...carSearch, dropoff_date: e.target.value})} required />
+                <input type="date" placeholder="Pickup Date" value={carSearch.pickup_date} onChange={(e) => setCarSearch({...carSearch, pickup_date: e.target.value})} />
+                <input type="date" placeholder="Dropoff Date" value={carSearch.dropoff_date} onChange={(e) => setCarSearch({...carSearch, dropoff_date: e.target.value})} />
                 <button type="submit">Search Cars</button>
               </form>
               
               <div className="results">
                 {carResults.map(car => (
-                  <div key={car.id} className={`result-card ${selectedBookings.car?.id === car.id ? 'selected' : ''}`}>
+                  <div key={car.id} className={`result-card ${selectedCar?.id === car.id ? 'selected' : ''}`}>
                     <h3>{car.brand} {car.model}</h3>
+                    <p>City: {car.city_name}</p>
                     <p>Year: {car.year}</p>
                     <p>Seats: {car.seats}</p>
                     <p>Transmission: {car.transmission}</p>
                     <p>Fuel: {car.fuel_type}</p>
                     <p className="price">${car.price_per_day}/day</p>
-                    <button onClick={() => selectItem('car', car)}>
-                      {selectedBookings.car?.id === car.id ? 'Selected' : 'Select'}
+                    <button onClick={() => setSelectedCar(car)}>
+                      {selectedCar?.id === car.id ? 'Selected' : 'Select'}
                     </button>
                   </div>
                 ))}
@@ -437,67 +570,106 @@ function App() {
             </div>
           )}
 
-          {(selectedBookings.flight || selectedBookings.hotel || selectedBookings.car) && (
+          {(selectedFlight || selectedRoom || selectedCar) && (
             <div className="booking-summary">
               <h3>Selected Items</h3>
-              {selectedBookings.flight && <p>Flight: {selectedBookings.flight.airline_name} {selectedBookings.flight.flight_number}</p>}
-              {selectedBookings.hotel && <p>Hotel: {selectedBookings.hotel.hotel_name} - {selectedBookings.hotel.room_type}</p>}
-              {selectedBookings.car && <p>Car: {selectedBookings.car.brand} {selectedBookings.car.model}</p>}
+              {selectedFlight && <p>Flight: {selectedFlight.airline_name} {selectedFlight.flight_number} ({seatClass})</p>}
+              {selectedRoom && <p>Hotel Room: {selectedRoom.hotel_name} - {selectedRoom.room_type}</p>}
+              {selectedCar && <p>Car: {selectedCar.brand} {selectedCar.model}</p>}
               <button className="proceed-btn" onClick={proceedToBooking}>Proceed to Booking</button>
             </div>
           )}
         </>
       ) : (
         <div className="booking-form">
-          <h2>Complete Your Booking</h2>
-          <form onSubmit={createBooking}>
-            <h3>Passenger Details</h3>
-            {passengers.map((passenger, index) => (
-              <div key={index} className="passenger-form">
-                <h4>Passenger {index + 1}</h4>
-                <input type="text" placeholder="First Name" value={passenger.first_name} 
-                  onChange={(e) => {
-                    const newPassengers = [...passengers]
-                    newPassengers[index].first_name = e.target.value
-                    setPassengers(newPassengers)
-                  }} required />
-                <input type="text" placeholder="Last Name" value={passenger.last_name}
-                  onChange={(e) => {
-                    const newPassengers = [...passengers]
-                    newPassengers[index].last_name = e.target.value
-                    setPassengers(newPassengers)
-                  }} required />
-                <select value={passenger.gender}
-                  onChange={(e) => {
-                    const newPassengers = [...passengers]
-                    newPassengers[index].gender = e.target.value
-                    setPassengers(newPassengers)
-                  }} required>
-                  <option value="">Select Gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-                <input type="date" placeholder="Date of Birth" value={passenger.dob}
-                  onChange={(e) => {
-                    const newPassengers = [...passengers]
-                    newPassengers[index].dob = e.target.value
-                    setPassengers(newPassengers)
-                  }} required />
-                <input type="text" placeholder="Passport Number" value={passenger.passport_no}
-                  onChange={(e) => {
-                    const newPassengers = [...passengers]
-                    newPassengers[index].passport_no = e.target.value
-                    setPassengers(newPassengers)
-                  }} required />
+          {!pendingBooking ? (
+            <>
+              <h2>Complete Your Booking</h2>
+              <form onSubmit={createBooking}>
+                <h3>Passenger Details</h3>
+                {passengers.map((passenger, index) => (
+                  <div key={index} className="passenger-form">
+                    <h4>Passenger {index + 1}</h4>
+                    <input type="text" placeholder="First Name" value={passenger.first_name} 
+                      onChange={(e) => {
+                        const newPassengers = [...passengers]
+                        newPassengers[index].first_name = e.target.value
+                        setPassengers(newPassengers)
+                      }} required />
+                    <input type="text" placeholder="Last Name" value={passenger.last_name}
+                      onChange={(e) => {
+                        const newPassengers = [...passengers]
+                        newPassengers[index].last_name = e.target.value
+                        setPassengers(newPassengers)
+                      }} required />
+                    <select value={passenger.gender}
+                      onChange={(e) => {
+                        const newPassengers = [...passengers]
+                        newPassengers[index].gender = e.target.value
+                        setPassengers(newPassengers)
+                      }} required>
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <input type="date" placeholder="Date of Birth" value={passenger.dob}
+                      onChange={(e) => {
+                        const newPassengers = [...passengers]
+                        newPassengers[index].dob = e.target.value
+                        setPassengers(newPassengers)
+                      }} required />
+                    <input type="text" placeholder="Passport Number" value={passenger.passport_no}
+                      onChange={(e) => {
+                        const newPassengers = [...passengers]
+                        newPassengers[index].passport_no = e.target.value
+                        setPassengers(newPassengers)
+                      }} required />
+                  </div>
+                ))}
+                
+                {selectedFlight && (
+                  <button type="button" onClick={() => setPassengers([...passengers, { first_name: '', last_name: '', gender: '', dob: '', passport_no: '' }])}>
+                    Add Passenger
+                  </button>
+                )}
+                
+                <div className="form-actions">
+                  <button type="button" onClick={() => { setShowBookingForm(false); setPendingBooking(null); }}>Back</button>
+                  <button type="submit" className="confirm-btn">Create Booking</button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2>Payment</h2>
+              <div className="booking-summary">
+                <h3>Booking Details</h3>
+                <p><strong>Booking ID:</strong> {pendingBooking.booking_id}</p>
+                <p><strong>Status:</strong> {pendingBooking.status}</p>
+                <p><strong>Total Amount:</strong> ${pendingBooking.total_amount}</p>
+                {pendingBooking.flight_booking && <p>Flight included</p>}
+                {pendingBooking.hotel_booking && <p>Hotel room included</p>}
+                {pendingBooking.car_booking && <p>Car rental included</p>}
               </div>
-            ))}
-            
-            <div className="form-actions">
-              <button type="button" onClick={() => setShowBookingForm(false)}>Back</button>
-              <button type="submit" className="confirm-btn">Confirm Booking</button>
-            </div>
-          </form>
+              
+              <form onSubmit={processPayment}>
+                <h3>Payment Details</h3>
+                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} required>
+                  <option value="card">Credit/Debit Card</option>
+                  <option value="wallet">Digital Wallet</option>
+                  <option value="upi">UPI</option>
+                </select>
+                
+                <p><strong>Amount to Pay:</strong> ${pendingBooking.total_amount}</p>
+                
+                <div className="form-actions">
+                  <button type="button" onClick={() => setPendingBooking(null)}>Cancel Payment</button>
+                  <button type="submit" className="confirm-btn">Pay Now</button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
       )}
     </div>

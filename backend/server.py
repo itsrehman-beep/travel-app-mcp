@@ -40,12 +40,12 @@ def list_cities() -> List[City]:
     ]
 
 @mcp.tool()
-def list_airports(city_id: str) -> List[AirportWithCity]:
+def list_airports(city_id: Optional[str] = None) -> List[AirportWithCity]:
     """
-    Returns airports in a specific city with airport and city names for easy understanding.
+    Returns airports, optionally filtered by city. If no city_id provided, returns all airports.
     
     Args:
-        city_id: ID of the city (e.g., CY0001)
+        city_id: Optional ID of the city to filter by (e.g., CY0001)
     
     Returns:
         List of airports with codes, names, and city information
@@ -55,19 +55,26 @@ def list_airports(city_id: str) -> List[AirportWithCity]:
     
     # Build city lookup
     cities_by_id = {c['id']: c for c in cities if c.get('id')}
-    city = cities_by_id.get(city_id)
-    city_name = city.get('name', '') if city else ''
     
-    # Filter airports for this city and return typed models
+    # Return all airports with city information
     result = []
     for a in airports:
-        if a.get('city_id') == city_id and a.get('code'):
-            result.append(AirportWithCity(
-                code=a['code'],
-                name=a['name'],
-                city_id=a['city_id'],
-                city_name=city_name
-            ))
+        if not a.get('code'):
+            continue
+        
+        # Apply city filter if provided
+        if city_id and a.get('city_id') != city_id:
+            continue
+        
+        city = cities_by_id.get(a.get('city_id', ''))
+        city_name = city.get('name', '') if city else ''
+        
+        result.append(AirportWithCity(
+            code=a['code'],
+            name=a['name'],
+            city_id=a['city_id'],
+            city_name=city_name
+        ))
     
     return result
 
@@ -772,6 +779,7 @@ if __name__ == "__main__":
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["*"],
+        expose_headers=["mcp-session-id"],  # Expose custom MCP session header
     )
     
     # Run server on port 8000
