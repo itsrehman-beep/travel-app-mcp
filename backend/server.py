@@ -1,7 +1,6 @@
 from fastmcp import FastMCP
 from datetime import datetime, date, timedelta
 from typing import List, Optional
-import uuid
 from models import (
     Flight, FlightSearchRequest, FlightWithAvailability,
     Hotel, Room, HotelSearchRequest, RoomWithAvailability,
@@ -228,7 +227,7 @@ def create_booking(
     """
     import json
     
-    booking_id = str(uuid.uuid4())
+    booking_id = sheets_client.generate_next_id('Booking', 'BK')
     now = datetime.now().isoformat()
     
     # Create main booking
@@ -243,8 +242,9 @@ def create_booking(
     
     # Create flight booking if provided
     if flight_id:
+        flight_booking_id = sheets_client.generate_next_id('FlightBooking', 'FBK')
         flight_booking_data = [
-            str(uuid.uuid4()),
+            flight_booking_id,
             booking_id,
             flight_id,
             flight_seat_class or 'economy',
@@ -254,8 +254,9 @@ def create_booking(
     
     # Create hotel booking if provided
     if room_id:
+        hotel_booking_id = sheets_client.generate_next_id('HotelBooking', 'HBK')
         hotel_booking_data = [
-            str(uuid.uuid4()),
+            hotel_booking_id,
             booking_id,
             room_id,
             check_in,
@@ -266,8 +267,9 @@ def create_booking(
     
     # Create car booking if provided
     if car_id:
+        car_booking_id = sheets_client.generate_next_id('CarBooking', 'CBK')
         car_booking_data = [
-            str(uuid.uuid4()),
+            car_booking_id,
             booking_id,
             car_id,
             pickup_time,
@@ -281,8 +283,9 @@ def create_booking(
     try:
         passengers = json.loads(passengers_json)
         for passenger in passengers:
+            passenger_id = sheets_client.generate_next_id('Passenger', 'PAX')
             passenger_data = [
-                str(uuid.uuid4()),
+                passenger_id,
                 booking_id,
                 passenger.get('first_name', ''),
                 passenger.get('last_name', ''),
@@ -295,7 +298,8 @@ def create_booking(
         pass
     
     # Create payment
-    payment_id = str(uuid.uuid4())
+    payment_id = sheets_client.generate_next_id('Payment', 'PMT')
+    transaction_ref = f'TXN{datetime.now().strftime("%Y%m%d%H%M%S")}'
     payment_data = [
         payment_id,
         booking_id,
@@ -303,7 +307,7 @@ def create_booking(
         str(total_amount),
         now,
         'success',
-        'TXN' + str(uuid.uuid4())[:8]
+        transaction_ref
     ]
     sheets_client.append_row('Payment', payment_data)
     
