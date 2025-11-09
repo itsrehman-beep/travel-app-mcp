@@ -76,30 +76,43 @@ A full-stack travel booking application that allows users to book flights, hotel
 
 ## Recent Changes (November 9, 2025)
 
-1. **Standardized ID Format Implementation**:
+1. **Complete Pydantic Type Safety Refactoring** (Latest):
+   - Added comprehensive input models: PassengerInput, FlightBookingInput, HotelBookingInput, CarBookingInput, PaymentInput
+   - Added search request models: FlightSearchRequest, HotelSearchRequest, CarSearchRequest
+   - Added response models: BookingResponse, FlightBookingSummary, HotelBookingSummary, CarBookingSummary, PaymentSummary
+   - Refactored all search endpoints to accept single Pydantic request objects and return typed model lists
+   - Completely refactored create_booking endpoint with robust validation:
+     * Requires at least one booking type (flight, hotel, or car)
+     * Validates flight passenger count >= 1 and matches passenger list length
+     * Validates hotel check-in < check-out date
+     * Validates car pickup < dropoff time
+   - Returns structured BookingResponse with all generated IDs and transaction details
+   - All endpoints now use Pydantic for automatic schema validation and type safety
+
+2. **Standardized ID Format Implementation**:
    - All primary keys now use prefix + zero-padded 4-digit format (e.g., FL0001, USR0001, BK0001)
    - Added `generate_next_id()` function to sheets_client.py for auto-generating sequential IDs
    - Updated populate_sheets.py to use new ID format for all sample data
    - Modified create_booking endpoint to generate IDs using new format
    - Updated frontend to use USR0001 as the current user
 
-2. Populated all Google Sheets tables with headers and sample data using new ID format
+3. Populated all Google Sheets tables with headers and sample data using new ID format
 
-3. Created Python FastMCP backend with 9 tool endpoints:
+4. Created Python FastMCP backend with 9 tool endpoints:
    - search_flights, search_hotels, search_cars
    - create_booking
    - get_cities, get_airports
    - get_user_bookings, get_booking_details
 
-4. Built React frontend with tabbed interface for flights, hotels, and cars
+5. Built React frontend with tabbed interface for flights, hotels, and cars
 
-5. Implemented complete booking flow with passenger form and payment confirmation
+6. Implemented complete booking flow with passenger form and payment confirmation
 
-6. Configured workflows for backend (port 8000) and frontend (port 5000)
+7. Configured workflows for backend (port 8000) and frontend (port 5000)
 
-7. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
+8. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
 
-8. Implemented SSE (Server-Sent Events) parser in frontend to handle FastMCP HTTP transport protocol
+9. Implemented SSE (Server-Sent Events) parser in frontend to handle FastMCP HTTP transport protocol
 
 ## How to Use
 
