@@ -158,6 +158,41 @@ class SheetsClient:
         
         response = requests.post(url, headers=headers)
         return response.status_code == 200
+    
+    def generate_next_id(self, table_name: str, prefix: str) -> str:
+        """Generate the next available ID with the given prefix and zero-padded 4-digit counter
+        
+        Args:
+            table_name: Name of the table
+            prefix: ID prefix (e.g., 'FL', 'USR', 'BK')
+        
+        Returns:
+            Next available ID (e.g., 'FL0001', 'USR0023')
+        """
+        rows = self.read_sheet(table_name)
+        
+        # Extract all existing IDs
+        existing_ids = []
+        for row in rows:
+            id_value = row.get('id', '').strip()
+            if id_value and id_value.startswith(prefix):
+                existing_ids.append(id_value)
+        
+        # Find the highest numeric value
+        max_num = 0
+        for id_str in existing_ids:
+            try:
+                # Extract numeric part after the prefix
+                num_part = id_str[len(prefix):]
+                num = int(num_part)
+                if num > max_num:
+                    max_num = num
+            except (ValueError, IndexError):
+                continue
+        
+        # Generate next ID
+        next_num = max_num + 1
+        return f"{prefix}{next_num:04d}"
 
 # Singleton instance
 sheets_client = SheetsClient()
