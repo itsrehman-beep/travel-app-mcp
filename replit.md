@@ -85,6 +85,8 @@ A full-stack travel booking application that allows users to book flights, hotel
 3. Built React frontend with tabbed interface for flights, hotels, and cars
 4. Implemented complete booking flow with passenger form and payment confirmation
 5. Configured workflows for backend (port 8000) and frontend (port 5000)
+6. Fixed CORS issues by adding CORSMiddleware to the FastMCP backend
+7. Implemented SSE (Server-Sent Events) parser in frontend to handle FastMCP HTTP transport protocol
 
 ## How to Use
 

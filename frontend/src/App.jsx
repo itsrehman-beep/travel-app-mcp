@@ -3,6 +3,160 @@ import './App.css'
 
 const API_URL = 'http://localhost:8000/mcp'
 
+let mcpSessionId = null
+let requestId = 0
+
+const initializeMCP = async () => {
+  if (mcpSessionId) return mcpSessionId
+  
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream'
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: {
+          name: 'travel-booking-client',
+          version: '1.0.0'
+        }
+      },
+      id: ++requestId
+    })
+  })
+  
+  mcpSessionId = response.headers.get('mcp-session-id')
+  
+  const contentType = response.headers.get('content-type')
+  if (contentType?.includes('text/event-stream')) {
+    await parseSSE(response)
+  } else {
+    await response.json()
+  }
+  
+  return mcpSessionId
+}
+
+const parseSSE = async (response) => {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result = null
+  let eventType = ''
+  let dataLines = []
+  
+  while (true) {
+    const { value, done } = await reader.read()
+    
+    if (done) {
+      if (buffer.trim()) {
+        const lines = buffer.split('\n')
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith('data: ')) {
+            dataLines.push(line.slice(6))
+          }
+        }
+        
+        if (eventType === 'message' && dataLines.length > 0) {
+          const jsonStr = dataLines.join('\n')
+          const data = JSON.parse(jsonStr)
+          if (data.error) {
+            throw new Error(data.error.message || 'API error')
+          }
+          result = data.result
+        } else if (eventType === 'error' && dataLines.length > 0) {
+          const jsonStr = dataLines.join('\n')
+          const data = JSON.parse(jsonStr)
+          throw new Error(data.error?.message || 'API error')
+        }
+      }
+      break
+    }
+    
+    buffer += decoder.decode(value, { stream: true })
+    
+    const events = buffer.split('\n\n')
+    buffer = events.pop() || ''
+    
+    for (const event of events) {
+      if (!event.trim()) continue
+      
+      eventType = ''
+      dataLines = []
+      const lines = event.split('\n')
+      
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          dataLines.push(line.slice(6))
+        }
+      }
+      
+      if (eventType === 'message' && dataLines.length > 0) {
+        const jsonStr = dataLines.join('\n')
+        const data = JSON.parse(jsonStr)
+        if (data.error) {
+          throw new Error(data.error.message || 'API error')
+        }
+        result = data.result
+      } else if (eventType === 'error' && dataLines.length > 0) {
+        const jsonStr = dataLines.join('\n')
+        const data = JSON.parse(jsonStr)
+        throw new Error(data.error?.message || 'API error')
+      } else if (eventType === 'done') {
+        break
+      }
+    }
+  }
+  
+  if (!result) {
+    throw new Error('No result found in SSE response')
+  }
+  return result
+}
+
+const callTool = async (toolName, args = {}) => {
+  await initializeMCP()
+  
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+      'Mcp-Session-Id': mcpSessionId
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        arguments: args
+      },
+      id: ++requestId
+    })
+  })
+  
+  const contentType = response.headers.get('content-type')
+  
+  if (contentType?.includes('text/event-stream')) {
+    return await parseSSE(response)
+  } else {
+    const data = await response.json()
+    if (data.error) {
+      throw new Error(data.error.message || 'API error')
+    }
+    return data.result
+  }
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('flights')
   const [cities, setCities] = useState([])
@@ -52,21 +206,15 @@ function App() {
 
   const fetchCitiesAndAirports = async () => {
     try {
-      const citiesRes = await fetch(`${API_URL}/tools/get_cities`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      })
-      const citiesData = await citiesRes.json()
-      if (citiesData.result) setCities(citiesData.result)
+      const citiesResult = await callTool('get_cities')
+      if (citiesResult?.content?.[0]?.text) {
+        setCities(JSON.parse(citiesResult.content[0].text))
+      }
 
-      const airportsRes = await fetch(`${API_URL}/tools/get_airports`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      })
-      const airportsData = await airportsRes.json()
-      if (airportsData.result) setAirports(airportsData.result)
+      const airportsResult = await callTool('get_airports')
+      if (airportsResult?.content?.[0]?.text) {
+        setAirports(JSON.parse(airportsResult.content[0].text))
+      }
     } catch (error) {
       console.error('Error fetching data:', error)
     }
@@ -75,13 +223,10 @@ function App() {
   const searchFlights = async (e) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${API_URL}/tools/search_flights`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(flightSearch)
-      })
-      const data = await res.json()
-      if (data.result) setFlightResults(data.result)
+      const result = await callTool('search_flights', flightSearch)
+      if (result?.content?.[0]?.text) {
+        setFlightResults(JSON.parse(result.content[0].text))
+      }
     } catch (error) {
       console.error('Error searching flights:', error)
     }
@@ -90,13 +235,10 @@ function App() {
   const searchHotels = async (e) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${API_URL}/tools/search_hotels`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(hotelSearch)
-      })
-      const data = await res.json()
-      if (data.result) setHotelResults(data.result)
+      const result = await callTool('search_hotels', hotelSearch)
+      if (result?.content?.[0]?.text) {
+        setHotelResults(JSON.parse(result.content[0].text))
+      }
     } catch (error) {
       console.error('Error searching hotels:', error)
     }
@@ -105,13 +247,10 @@ function App() {
   const searchCars = async (e) => {
     e.preventDefault()
     try {
-      const res = await fetch(`${API_URL}/tools/search_cars`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(carSearch)
-      })
-      const data = await res.json()
-      if (data.result) setCarResults(data.result)
+      const result = await callTool('search_cars', carSearch)
+      if (result?.content?.[0]?.text) {
+        setCarResults(JSON.parse(result.content[0].text))
+      }
     } catch (error) {
       console.error('Error searching cars:', error)
     }
@@ -160,14 +299,10 @@ function App() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/tools/create_booking`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookingData)
-      })
-      const data = await res.json()
-      if (data.result) {
-        alert(`Booking confirmed! Booking ID: ${data.result.booking_id}`)
+      const result = await callTool('create_booking', bookingData)
+      if (result?.content?.[0]?.text) {
+        const bookingResult = JSON.parse(result.content[0].text)
+        alert(`Booking confirmed! Booking ID: ${bookingResult.booking_id}`)
         setShowBookingForm(false)
         setSelectedBookings({ flight: null, hotel: null, car: null })
         setFlightResults([])
@@ -176,7 +311,7 @@ function App() {
       }
     } catch (error) {
       console.error('Error creating booking:', error)
-      alert('Error creating booking')
+      alert('Error creating booking: ' + error.message)
     }
   }
 
