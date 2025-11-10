@@ -1,5 +1,5 @@
 from fastmcp import FastMCP
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import re
 from models import (
@@ -10,7 +10,8 @@ from models import (
     Passenger, Payment, CreateBookingRequest,
     User, City, Airport, AirportWithCity,
     PassengerInput, FlightBookingInput, HotelBookingInput, CarBookingInput, PaymentInput,
-    BookingResponse, FlightBookingSummary, HotelBookingSummary, CarBookingSummary, PaymentSummary
+    BookingResponse, FlightBookingSummary, HotelBookingSummary, CarBookingSummary, PaymentSummary,
+    BookFlightRequest, BookHotelRequest, BookCarRequest, PendingBookingResponse
 )
 from sheets_client import sheets_client
 
@@ -147,6 +148,15 @@ def list_flights(origin_code: Optional[str] = None, destination_code: Optional[s
         dest_city = cities_by_id.get(dest_airport['city_id']) if dest_airport else None
         
         # Convert to typed model with human-readable names
+        # Parse datetimes and add UTC timezone for RFC3339 compliance
+        departure_dt = datetime.fromisoformat(flight_row['departure_time'])
+        if departure_dt.tzinfo is None:
+            departure_dt = departure_dt.replace(tzinfo=timezone.utc)
+        
+        arrival_dt = datetime.fromisoformat(flight_row['arrival_time'])
+        if arrival_dt.tzinfo is None:
+            arrival_dt = arrival_dt.replace(tzinfo=timezone.utc)
+        
         flight = FlightWithAvailability(
             id=flight_row['id'],
             flight_number=flight_row['flight_number'],
@@ -154,8 +164,8 @@ def list_flights(origin_code: Optional[str] = None, destination_code: Optional[s
             aircraft_model=flight_row['aircraft_model'],
             origin_code=flight_row['origin_code'],
             destination_code=flight_row['destination_code'],
-            departure_time=datetime.fromisoformat(flight_row['departure_time']),
-            arrival_time=datetime.fromisoformat(flight_row['arrival_time']),
+            departure_time=departure_dt,
+            arrival_time=arrival_dt,
             base_price=float(flight_row['base_price']),
             available_seats=available_seats,
             origin_airport_name=origin_airport.get('name', '') if origin_airport else '',
@@ -343,63 +353,33 @@ def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
 # ===== BOOKING MANAGEMENT TOOLS =====
 
 @mcp.tool()
-def create_booking(request: CreateBookingRequest) -> BookingResponse:
+def book_flight(request: BookFlightRequest) -> PendingBookingResponse:
     """
-    Creates a single master booking with optional flight, hotel, and car bookings.
-    Booking starts in 'pending' status. Use process_payment() to complete payment and confirm booking.
+    Books a flight with passenger details. Returns booking_id with 'pending' status.
+    Use process_payment() to complete payment and confirm the booking.
     
     Args:
-        request: Booking request with user_id, optional flight/hotel/car bookings, and passengers
+        request: Flight booking request with user_id, flight_id, seat_class, and passengers
     
     Returns:
-        Created booking details with booking_id. Status is 'pending' until payment is processed.
+        Pending booking with booking_id and total amount to be paid
     """
-    # Validation: Ensure at least one booking type is provided
-    if not any([request.flight_booking, request.hotel_booking, request.car_booking]):
-        raise ValueError("At least one of flight_booking, hotel_booking, or car_booking must be provided")
+    # Validation: Must have at least 1 passenger
+    if len(request.passengers) == 0:
+        raise ValueError("At least one passenger is required for flight booking")
     
-    # Validation: Flight booking passenger checks
-    if request.flight_booking:
-        if request.flight_booking.passengers < 1:
-            raise ValueError("Flight booking must have at least 1 passenger")
-        if len(request.passengers) == 0:
-            raise ValueError("Passengers list cannot be empty when booking a flight")
-        if request.flight_booking.passengers != len(request.passengers):
-            raise ValueError(f"Flight booking declares {request.flight_booking.passengers} passengers but {len(request.passengers)} passenger records provided")
-    
-    # Validation: Date range checks
-    if request.hotel_booking and request.hotel_booking.check_in >= request.hotel_booking.check_out:
-        raise ValueError("Hotel check-in date must be before check-out date")
-    
-    if request.car_booking and request.car_booking.pickup_time >= request.car_booking.dropoff_time:
-        raise ValueError("Car pickup time must be before dropoff time")
-    
-    # Calculate total price from individual bookings
+    # Load flight data to calculate price
     flights_data = sheets_client.read_sheet('Flight')
-    rooms_data = sheets_client.read_sheet('Room')
-    cars_data = sheets_client.read_sheet('Car')
+    flight = next((f for f in flights_data if f.get('id') == request.flight_id), None)
+    if not flight:
+        raise ValueError(f"Flight {request.flight_id} not found")
     
-    total_price = 0.0
-    if request.flight_booking:
-        flight = next((f for f in flights_data if f.get('id') == request.flight_booking.flight_id), None)
-        if flight:
-            total_price += float(flight.get('base_price', 0)) * request.flight_booking.passengers
-    
-    if request.hotel_booking:
-        room = next((r for r in rooms_data if r.get('id') == request.hotel_booking.room_id), None)
-        if room:
-            nights = (request.hotel_booking.check_out - request.hotel_booking.check_in).days
-            total_price += float(room.get('price_per_night', 0)) * nights
-    
-    if request.car_booking:
-        car = next((c for c in cars_data if c.get('id') == request.car_booking.car_id), None)
-        if car:
-            days = (request.car_booking.dropoff_time - request.car_booking.pickup_time).days
-            total_price += float(car.get('price_per_day', 0)) * max(1, days)
+    # Calculate total price
+    total_price = float(flight.get('base_price', 0)) * len(request.passengers)
     
     # Generate booking ID and timestamp
     booking_id = sheets_client.generate_next_id('Booking', 'BK')
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     
     # Create main booking with 'pending' status
     booking_data = [
@@ -411,74 +391,18 @@ def create_booking(request: CreateBookingRequest) -> BookingResponse:
     ]
     sheets_client.append_row('Booking', booking_data)
     
-    # Create flight booking if provided
-    flight_booking_summary = None
-    if request.flight_booking:
-        flight_booking_id = sheets_client.generate_next_id('FlightBooking', 'FBK')
-        flight_booking_data = [
-            flight_booking_id,
-            booking_id,
-            request.flight_booking.flight_id,
-            request.flight_booking.seat_class,
-            str(request.flight_booking.passengers)
-        ]
-        sheets_client.append_row('FlightBooking', flight_booking_data)
-        
-        flight_booking_summary = FlightBookingSummary(
-            id=flight_booking_id,
-            flight_id=request.flight_booking.flight_id,
-            seat_class=request.flight_booking.seat_class,
-            passengers=request.flight_booking.passengers
-        )
+    # Create flight booking
+    flight_booking_id = sheets_client.generate_next_id('FlightBooking', 'FBK')
+    flight_booking_data = [
+        flight_booking_id,
+        booking_id,
+        request.flight_id,
+        request.seat_class,
+        str(len(request.passengers))
+    ]
+    sheets_client.append_row('FlightBooking', flight_booking_data)
     
-    # Create hotel booking if provided
-    hotel_booking_summary = None
-    if request.hotel_booking:
-        hotel_booking_id = sheets_client.generate_next_id('HotelBooking', 'HBK')
-        hotel_booking_data = [
-            hotel_booking_id,
-            booking_id,
-            request.hotel_booking.room_id,
-            request.hotel_booking.check_in.isoformat(),
-            request.hotel_booking.check_out.isoformat(),
-            str(request.hotel_booking.guests)
-        ]
-        sheets_client.append_row('HotelBooking', hotel_booking_data)
-        
-        hotel_booking_summary = HotelBookingSummary(
-            id=hotel_booking_id,
-            room_id=request.hotel_booking.room_id,
-            check_in=request.hotel_booking.check_in,
-            check_out=request.hotel_booking.check_out,
-            guests=request.hotel_booking.guests
-        )
-    
-    # Create car booking if provided
-    car_booking_summary = None
-    if request.car_booking:
-        car_booking_id = sheets_client.generate_next_id('CarBooking', 'CBK')
-        car_booking_data = [
-            car_booking_id,
-            booking_id,
-            request.car_booking.car_id,
-            request.car_booking.pickup_time.isoformat(),
-            request.car_booking.dropoff_time.isoformat(),
-            request.car_booking.pickup_location,
-            request.car_booking.dropoff_location
-        ]
-        sheets_client.append_row('CarBooking', car_booking_data)
-        
-        car_booking_summary = CarBookingSummary(
-            id=car_booking_id,
-            car_id=request.car_booking.car_id,
-            pickup_time=request.car_booking.pickup_time,
-            dropoff_time=request.car_booking.dropoff_time,
-            pickup_location=request.car_booking.pickup_location,
-            dropoff_location=request.car_booking.dropoff_location
-        )
-    
-    # Add passengers (with 5-digit PA prefix)
-    passenger_ids = []
+    # Add passengers
     for passenger_input in request.passengers:
         passenger_id = sheets_client.generate_next_id('Passenger', 'PA', width=5)
         passenger_data = [
@@ -491,20 +415,128 @@ def create_booking(request: CreateBookingRequest) -> BookingResponse:
             passenger_input.passport_no
         ]
         sheets_client.append_row('Passenger', passenger_data)
-        passenger_ids.append(passenger_id)
     
-    # Build and return response - payment must be processed separately
-    return BookingResponse(
+    return PendingBookingResponse(
         booking_id=booking_id,
-        user_id=request.user_id,
-        status='pending',
-        booked_at=now,
-        total_amount=total_price,
-        flight_booking=flight_booking_summary,
-        hotel_booking=hotel_booking_summary,
-        car_booking=car_booking_summary,
-        passenger_ids=passenger_ids,
-        payment=None  # Payment not yet processed
+        status="pending",
+        total_amount=total_price
+    )
+
+@mcp.tool()
+def book_hotel(request: BookHotelRequest) -> PendingBookingResponse:
+    """
+    Books a hotel room. Returns booking_id with 'pending' status.
+    Use process_payment() to complete payment and confirm the booking.
+    
+    Args:
+        request: Hotel booking request with user_id, room_id, check-in/out dates, and guests
+    
+    Returns:
+        Pending booking with booking_id and total amount to be paid
+    """
+    # Validation: Check-in must be before check-out
+    if request.check_in >= request.check_out:
+        raise ValueError("Check-in date must be before check-out date")
+    
+    # Load room data to calculate price
+    rooms_data = sheets_client.read_sheet('Room')
+    room = next((r for r in rooms_data if r.get('id') == request.room_id), None)
+    if not room:
+        raise ValueError(f"Room {request.room_id} not found")
+    
+    # Calculate total price
+    nights = (request.check_out - request.check_in).days
+    total_price = float(room.get('price_per_night', 0)) * nights
+    
+    # Generate booking ID and timestamp
+    booking_id = sheets_client.generate_next_id('Booking', 'BK')
+    now = datetime.now(timezone.utc)
+    
+    # Create main booking with 'pending' status
+    booking_data = [
+        booking_id,
+        request.user_id,
+        'pending',
+        now.isoformat(),
+        str(total_price)
+    ]
+    sheets_client.append_row('Booking', booking_data)
+    
+    # Create hotel booking
+    hotel_booking_id = sheets_client.generate_next_id('HotelBooking', 'HBK')
+    hotel_booking_data = [
+        hotel_booking_id,
+        booking_id,
+        request.room_id,
+        request.check_in.isoformat(),
+        request.check_out.isoformat(),
+        str(request.guests)
+    ]
+    sheets_client.append_row('HotelBooking', hotel_booking_data)
+    
+    return PendingBookingResponse(
+        booking_id=booking_id,
+        status="pending",
+        total_amount=total_price
+    )
+
+@mcp.tool()
+def book_car(request: BookCarRequest) -> PendingBookingResponse:
+    """
+    Books a rental car. Returns booking_id with 'pending' status.
+    Use process_payment() to complete payment and confirm the booking.
+    
+    Args:
+        request: Car booking request with user_id, car_id, pickup/dropoff times and locations
+    
+    Returns:
+        Pending booking with booking_id and total amount to be paid
+    """
+    # Validation: Pickup must be before dropoff
+    if request.pickup_time >= request.dropoff_time:
+        raise ValueError("Pickup time must be before dropoff time")
+    
+    # Load car data to calculate price
+    cars_data = sheets_client.read_sheet('Car')
+    car = next((c for c in cars_data if c.get('id') == request.car_id), None)
+    if not car:
+        raise ValueError(f"Car {request.car_id} not found")
+    
+    # Calculate total price
+    days = (request.dropoff_time - request.pickup_time).days
+    total_price = float(car.get('price_per_day', 0)) * max(1, days)
+    
+    # Generate booking ID and timestamp
+    booking_id = sheets_client.generate_next_id('Booking', 'BK')
+    now = datetime.now(timezone.utc)
+    
+    # Create main booking with 'pending' status
+    booking_data = [
+        booking_id,
+        request.user_id,
+        'pending',
+        now.isoformat(),
+        str(total_price)
+    ]
+    sheets_client.append_row('Booking', booking_data)
+    
+    # Create car booking
+    car_booking_id = sheets_client.generate_next_id('CarBooking', 'CBK')
+    car_booking_data = [
+        car_booking_id,
+        booking_id,
+        request.car_id,
+        request.pickup_time.isoformat(),
+        request.dropoff_time.isoformat(),
+        request.pickup_location,
+        request.dropoff_location
+    ]
+    sheets_client.append_row('CarBooking', car_booking_data)
+    
+    return PendingBookingResponse(
+        booking_id=booking_id,
+        status="pending",
+        total_amount=total_price
     )
 
 @mcp.tool()

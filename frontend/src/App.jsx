@@ -218,13 +218,11 @@ function App() {
 
   const fetchCitiesAndAirports = async () => {
     try {
-      const citiesResult = await callTool('list_cities')
-      const citiesData = citiesResult?.structuredContent?.result || (citiesResult?.content?.[0]?.text ? JSON.parse(citiesResult.content[0].text) : [])
-      setCities(citiesData)
+      const citiesData = await callTool('list_cities')
+      setCities(citiesData || [])
 
-      const airportsResult = await callTool('list_airports')
-      const airportsData = airportsResult?.structuredContent?.result || (airportsResult?.content?.[0]?.text ? JSON.parse(airportsResult.content[0].text) : [])
-      setAirports(airportsData)
+      const airportsData = await callTool('list_airports')
+      setAirports(airportsData || [])
     } catch (error) {
       console.error('Error fetching data:', error)
       alert('Failed to load cities and airports: ' + error.message)
@@ -239,9 +237,8 @@ function App() {
       if (flightSearch.destination_code) params.destination_code = flightSearch.destination_code
       if (flightSearch.date) params.date = flightSearch.date
       
-      const result = await callTool('list_flights', params)
-      const flightsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
-      setFlightResults(flightsData)
+      const flightsData = await callTool('list_flights', params)
+      setFlightResults(flightsData || [])
     } catch (error) {
       console.error('Error searching flights:', error)
       alert('Error searching flights: ' + error.message)
@@ -252,9 +249,8 @@ function App() {
     e.preventDefault()
     try {
       const params = hotelSearch.city ? { city: hotelSearch.city } : {}
-      const result = await callTool('list_hotels', params)
-      const hotelsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
-      setHotels(hotelsData)
+      const hotelsData = await callTool('list_hotels', params)
+      setHotels(hotelsData || [])
       setRooms([])
       setSelectedRoom(null)
     } catch (error) {
@@ -265,9 +261,8 @@ function App() {
 
   const fetchRooms = async (hotelId, hotelName) => {
     try {
-      const result = await callTool('list_rooms', { hotel_id: hotelId })
-      const roomsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
-      setRooms(roomsData)
+      const roomsData = await callTool('list_rooms', { hotel_id: hotelId })
+      setRooms(roomsData || [])
       setSelectedHotel({ id: hotelId, name: hotelName })
     } catch (error) {
       console.error('Error fetching rooms:', error)
@@ -279,9 +274,8 @@ function App() {
     e.preventDefault()
     try {
       const params = carSearch.city ? { city: carSearch.city } : {}
-      const result = await callTool('list_cars', params)
-      const carsData = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : [])
-      setCarResults(carsData)
+      const carsData = await callTool('list_cars', params)
+      setCarResults(carsData || [])
     } catch (error) {
       console.error('Error searching cars:', error)
       alert('Error searching cars: ' + error.message)
@@ -308,47 +302,43 @@ function App() {
       return
     }
 
-    const bookingData = {
-      user_id: 'USR0001',
-      passengers: passengers.map(p => ({
-        first_name: p.first_name,
-        last_name: p.last_name,
-        gender: p.gender,
-        dob: p.dob,
-        passport_no: p.passport_no
-      }))
-    }
-
-    if (selectedFlight) {
-      bookingData.flight_booking = {
-        flight_id: selectedFlight.id,
-        seat_class: seatClass,
-        passengers: passengers.length
-      }
-    }
-
-    if (selectedRoom) {
-      bookingData.hotel_booking = {
-        room_id: selectedRoom.id,
-        check_in: hotelSearch.check_in,
-        check_out: hotelSearch.check_out,
-        guests: hotelSearch.guests
-      }
-    }
-
-    if (selectedCar) {
-      bookingData.car_booking = {
-        car_id: selectedCar.id,
-        pickup_time: carSearch.pickup_date + 'T10:00:00',
-        dropoff_time: carSearch.dropoff_date + 'T18:00:00',
-        pickup_location: 'Airport',
-        dropoff_location: 'Hotel'
-      }
-    }
-
     try {
-      const result = await callTool('create_booking', bookingData)
-      const bookingResponse = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result)
+      let bookingResponse
+      
+      if (selectedFlight) {
+        const flightBookingData = {
+          user_id: 'USR0001',
+          flight_id: selectedFlight.id,
+          seat_class: seatClass,
+          passengers: passengers.map(p => ({
+            first_name: p.first_name,
+            last_name: p.last_name,
+            gender: p.gender,
+            dob: p.dob,
+            passport_no: p.passport_no
+          }))
+        }
+        bookingResponse = await callTool('book_flight', flightBookingData)
+      } else if (selectedRoom) {
+        const hotelBookingData = {
+          user_id: 'USR0001',
+          room_id: selectedRoom.id,
+          check_in: hotelSearch.check_in,
+          check_out: hotelSearch.check_out,
+          guests: hotelSearch.guests
+        }
+        bookingResponse = await callTool('book_hotel', hotelBookingData)
+      } else if (selectedCar) {
+        const carBookingData = {
+          user_id: 'USR0001',
+          car_id: selectedCar.id,
+          pickup_time: carSearch.pickup_date + 'T10:00:00',
+          dropoff_time: carSearch.dropoff_date + 'T18:00:00',
+          pickup_location: 'Airport',
+          dropoff_location: 'Hotel'
+        }
+        bookingResponse = await callTool('book_car', carBookingData)
+      }
       
       if (bookingResponse && bookingResponse.booking_id) {
         setPendingBooking(bookingResponse)
@@ -371,15 +361,13 @@ function App() {
     }
 
     try {
-      const result = await callTool('process_payment', {
+      const paymentResponse = await callTool('process_payment', {
         booking_id: pendingBooking.booking_id,
         payment: {
           method: paymentMethod,
           amount: pendingBooking.total_amount
         }
       })
-      
-      const paymentResponse = result?.structuredContent?.result || (result?.content?.[0]?.text ? JSON.parse(result.content[0].text) : result)
       
       if (paymentResponse && paymentResponse.success) {
         alert(`Payment successful!\n\nBooking ID: ${paymentResponse.booking_id}\nPayment ID: ${paymentResponse.payment_id}\nTransaction Ref: ${paymentResponse.transaction_ref}\nStatus: ${paymentResponse.booking_status}`)

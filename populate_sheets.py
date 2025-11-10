@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, 'backend')
 
 from sheets_client import sheets_client
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 def populate_all_sheets():
     """Populate all Google Sheets tables with sample data using standardized ID format"""
@@ -41,17 +41,17 @@ def populate_all_sheets():
     print('\nPopulating FLIGHT table...')
     flights = [
         ['FL0001', 'AA101', 'American Airlines', 'Boeing 777', 'JFK', 'LAX', 
-         (datetime.now() + timedelta(days=7, hours=8)).isoformat(), 
-         (datetime.now() + timedelta(days=7, hours=14)).isoformat(), '350.00'],
+         (datetime.now(timezone.utc) + timedelta(days=7, hours=8)).isoformat(), 
+         (datetime.now(timezone.utc) + timedelta(days=7, hours=14)).isoformat(), '350.00'],
         ['FL0002', 'BA202', 'British Airways', 'Airbus A380', 'LHR', 'JFK', 
-         (datetime.now() + timedelta(days=5, hours=10)).isoformat(), 
-         (datetime.now() + timedelta(days=5, hours=18)).isoformat(), '650.00'],
+         (datetime.now(timezone.utc) + timedelta(days=5, hours=10)).isoformat(), 
+         (datetime.now(timezone.utc) + timedelta(days=5, hours=18)).isoformat(), '650.00'],
         ['FL0003', 'AF303', 'Air France', 'Boeing 787', 'CDG', 'DXB', 
-         (datetime.now() + timedelta(days=10, hours=14)).isoformat(), 
-         (datetime.now() + timedelta(days=10, hours=20)).isoformat(), '550.00'],
+         (datetime.now(timezone.utc) + timedelta(days=10, hours=14)).isoformat(), 
+         (datetime.now(timezone.utc) + timedelta(days=10, hours=20)).isoformat(), '550.00'],
         ['FL0004', 'JL404', 'Japan Airlines', 'Boeing 777', 'NRT', 'LAX', 
-         (datetime.now() + timedelta(days=15, hours=16)).isoformat(), 
-         (datetime.now() + timedelta(days=15, hours=25)).isoformat(), '800.00'],
+         (datetime.now(timezone.utc) + timedelta(days=15, hours=16)).isoformat(), 
+         (datetime.now(timezone.utc) + timedelta(days=15, hours=25)).isoformat(), '800.00'],
     ]
     for flight in flights:
         sheets_client.append_row('Flight', flight)

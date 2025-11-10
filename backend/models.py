@@ -242,6 +242,30 @@ class CreateBookingRequest(BaseModel):
     car_booking: Optional[CarBookingInput] = None
     passengers: list[PassengerInput] = Field(default_factory=list)
 
+class BookFlightRequest(BaseModel):
+    """Request to book a flight with passenger details."""
+    user_id: str = Field(description="User ID making the booking")
+    flight_id: str = Field(description="Flight ID from search results")
+    seat_class: Literal["economy", "business"] = Field(default="economy", description="Seat class")
+    passengers: list[PassengerInput] = Field(description="List of passenger details (at least 1)")
+
+class BookHotelRequest(BaseModel):
+    """Request to book a hotel room."""
+    user_id: str = Field(description="User ID making the booking")
+    room_id: str = Field(description="Room ID from search results")
+    check_in: date = Field(description="Check-in date (YYYY-MM-DD)")
+    check_out: date = Field(description="Check-out date (YYYY-MM-DD)")
+    guests: int = Field(description="Number of guests", gt=0)
+
+class BookCarRequest(BaseModel):
+    """Request to book a rental car."""
+    user_id: str = Field(description="User ID making the booking")
+    car_id: str = Field(description="Car ID from search results")
+    pickup_time: datetime = Field(description="Pickup datetime (ISO 8601)")
+    dropoff_time: datetime = Field(description="Drop-off datetime (ISO 8601)")
+    pickup_location: str = Field(description="Pickup location address")
+    dropoff_location: str = Field(description="Drop-off location address")
+
 class FlightWithAvailability(Flight):
     """Flight search result with availability and human-readable location names"""
     available_seats: int
@@ -292,6 +316,13 @@ class PaymentSummary(BaseModel):
     status: Literal["success", "failed", "refunded"]
     transaction_ref: str
     paid_at: datetime
+
+class PendingBookingResponse(BaseModel):
+    """Simplified response for newly created pending bookings."""
+    booking_id: str = Field(description="Unique booking identifier")
+    status: Literal["pending"] = Field(default="pending", description="Booking status (always 'pending' for new bookings)")
+    total_amount: float = Field(description="Total booking amount to be paid")
+    message: str = Field(default="Booking created successfully. Use process_payment() to complete payment and confirm booking.", description="Next steps information")
 
 class BookingResponse(BaseModel):
     booking_id: str
