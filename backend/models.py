@@ -244,14 +244,12 @@ class CreateBookingRequest(BaseModel):
 
 class BookFlightRequest(BaseModel):
     """Request to book a flight with passenger details."""
-    user_id: str = Field(description="User ID making the booking")
     flight_id: str = Field(description="Flight ID from search results")
     seat_class: Literal["economy", "business"] = Field(default="economy", description="Seat class")
     passengers: list[PassengerInput] = Field(description="List of passenger details (at least 1)")
 
 class BookHotelRequest(BaseModel):
     """Request to book a hotel room."""
-    user_id: str = Field(description="User ID making the booking")
     room_id: str = Field(description="Room ID from search results")
     check_in: date = Field(description="Check-in date (YYYY-MM-DD)")
     check_out: date = Field(description="Check-out date (YYYY-MM-DD)")
@@ -259,7 +257,6 @@ class BookHotelRequest(BaseModel):
 
 class BookCarRequest(BaseModel):
     """Request to book a rental car."""
-    user_id: str = Field(description="User ID making the booking")
     car_id: str = Field(description="Car ID from search results")
     pickup_time: datetime = Field(description="Pickup datetime (ISO 8601)")
     dropoff_time: datetime = Field(description="Drop-off datetime (ISO 8601)")

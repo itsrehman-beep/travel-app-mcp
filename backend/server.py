@@ -353,17 +353,21 @@ def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
 # ===== BOOKING MANAGEMENT TOOLS =====
 
 @mcp.tool()
-def book_flight(request: BookFlightRequest) -> PendingBookingResponse:
+def book_flight(auth_token: str, request: BookFlightRequest) -> PendingBookingResponse:
     """
     Books a flight with passenger details. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
     Args:
-        request: Flight booking request with user_id, flight_id, seat_class, and passengers
+        auth_token: JWT authentication token from login
+        request: Flight booking request with flight_id, seat_class, and passengers
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
+    # Authenticate user and get user_id
+    user_id = require_user(auth_token)
+    
     # Validation: Must have at least 1 passenger
     if len(request.passengers) == 0:
         raise ValueError("At least one passenger is required for flight booking")
@@ -384,7 +388,7 @@ def book_flight(request: BookFlightRequest) -> PendingBookingResponse:
     # Create main booking with 'pending' status
     booking_data = [
         booking_id,
-        request.user_id,
+        user_id,
         'pending',
         now.isoformat(),
         str(total_price)
@@ -423,17 +427,21 @@ def book_flight(request: BookFlightRequest) -> PendingBookingResponse:
     )
 
 @mcp.tool()
-def book_hotel(request: BookHotelRequest) -> PendingBookingResponse:
+def book_hotel(auth_token: str, request: BookHotelRequest) -> PendingBookingResponse:
     """
     Books a hotel room. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
     Args:
-        request: Hotel booking request with user_id, room_id, check-in/out dates, and guests
+        auth_token: JWT authentication token from login
+        request: Hotel booking request with room_id, check-in/out dates, and guests
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
+    # Authenticate user and get user_id
+    user_id = require_user(auth_token)
+    
     # Validation: Check-in must be before check-out
     if request.check_in >= request.check_out:
         raise ValueError("Check-in date must be before check-out date")
@@ -455,7 +463,7 @@ def book_hotel(request: BookHotelRequest) -> PendingBookingResponse:
     # Create main booking with 'pending' status
     booking_data = [
         booking_id,
-        request.user_id,
+        user_id,
         'pending',
         now.isoformat(),
         str(total_price)
@@ -481,17 +489,21 @@ def book_hotel(request: BookHotelRequest) -> PendingBookingResponse:
     )
 
 @mcp.tool()
-def book_car(request: BookCarRequest) -> PendingBookingResponse:
+def book_car(auth_token: str, request: BookCarRequest) -> PendingBookingResponse:
     """
     Books a rental car. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
     Args:
-        request: Car booking request with user_id, car_id, pickup/dropoff times and locations
+        auth_token: JWT authentication token from login
+        request: Car booking request with car_id, pickup/dropoff times and locations
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
+    # Authenticate user and get user_id
+    user_id = require_user(auth_token)
+    
     # Validation: Pickup must be before dropoff
     if request.pickup_time >= request.dropoff_time:
         raise ValueError("Pickup time must be before dropoff time")
@@ -513,7 +525,7 @@ def book_car(request: BookCarRequest) -> PendingBookingResponse:
     # Create main booking with 'pending' status
     booking_data = [
         booking_id,
-        request.user_id,
+        user_id,
         'pending',
         now.isoformat(),
         str(total_price)
@@ -729,17 +741,20 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
     }
 
 @mcp.tool()
-def process_payment(booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
+def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
     """
     Processes payment for a pending booking. Changes booking status from 'pending' to 'confirmed'.
     
     Args:
+        auth_token: JWT authentication token from login
         booking_id: ID of the booking to pay for (e.g., BK0001)
         payment: Payment details including method and amount
     
     Returns:
         Payment confirmation with transaction details
     """
+    # Authenticate user
+    user_id = require_user(auth_token)
     # Find the booking
     result = sheets_client.find_row_by_id('Booking', booking_id)
     if not result:
