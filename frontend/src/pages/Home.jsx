@@ -23,7 +23,7 @@ const initializeMCP = async () => {
         jsonrpc: '2.0',
         method: 'initialize',
         params: {
-          protocolVersion: '2024-11-05',
+          protocolVersion: '2024-10-07',
           capabilities: {},
           clientInfo: {
             name: 'travel-booking-client',

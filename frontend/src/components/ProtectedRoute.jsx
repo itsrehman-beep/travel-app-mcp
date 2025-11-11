@@ -10,12 +10,22 @@ export const ProtectedRoute = ({ children }) => {
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center', 
-        minHeight: '100vh' 
+        minHeight: '100vh',
+        flexDirection: 'column',
+        gap: '1rem'
       }}>
-        <div style={{ fontSize: '2rem' }}>Loading...</div>
+        <div style={{ 
+          fontSize: '3rem',
+          animation: 'spin 1s linear infinite'
+        }}>✈️</div>
+        <div style={{ fontSize: '1.25rem', color: '#64748b' }}>Loading...</div>
       </div>
     )
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return children
 }
