@@ -3,9 +3,8 @@ import jwt
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
-from sqlalchemy import create_engine, Column, String, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, String, DateTime, Boolean
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from pydantic import BaseModel
 
 # Database setup
@@ -15,25 +14,29 @@ if not DATABASE_URL:
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
-# JWT secret
-JWT_SECRET = os.environ.get('SESSION_SECRET', 'dev-secret-change-in-production')
+class Base(DeclarativeBase):
+    pass
+
+# JWT secret - strict enforcement
+JWT_SECRET = os.environ.get('SESSION_SECRET')
+if not JWT_SECRET:
+    raise Exception('SESSION_SECRET environment variable must be set')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24 * 7  # 1 week
 
-# Models
+# Models using SQLAlchemy 2.0 style
 class User(Base):
     __tablename__ = 'users'
     
-    id = Column(String, primary_key=True)
-    email = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)
-    first_name = Column(String, nullable=True)
-    last_name = Column(String, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    is_active = Column(Boolean, default=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    first_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 # Pydantic models for validation
 class RegisterRequest(BaseModel):

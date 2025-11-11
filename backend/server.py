@@ -796,13 +796,97 @@ def process_payment(booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
         'booking_status': 'confirmed'
     }
 
+# Helper function for authentication in MCP tools
+def require_user(auth_token: str) -> str:
+    """
+    Validate auth token and return user_id.
+    Raises exception if token is invalid or missing.
+    """
+    from auth import extract_user_id_from_token
+    
+    if not auth_token:
+        raise Exception('Authentication required. Please provide auth_token.')
+    
+    user_id = extract_user_id_from_token(auth_token)
+    if not user_id:
+        raise Exception('Invalid or expired authentication token.')
+    
+    return user_id
+
 # Run the server
 if __name__ == "__main__":
     import uvicorn
+    import json
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
     from starlette.middleware.cors import CORSMiddleware
+    from starlette.routing import Route
+    from auth import (
+        init_db, 
+        register_user, 
+        login_user, 
+        get_user_from_token,
+        RegisterRequest, 
+        LoginRequest
+    )
+    
+    # Initialize database tables
+    print("Initializing database...")
+    init_db()
+    print("Database initialized successfully!")
+    
+    # Authentication route handlers
+    async def handle_register(request: Request):
+        """Register a new user"""
+        try:
+            body = await request.json()
+            reg_request = RegisterRequest(**body)
+            response = register_user(reg_request)
+            return JSONResponse(content=response.model_dump(), status_code=201)
+        except Exception as e:
+            return JSONResponse(content={'error': str(e)}, status_code=400)
+    
+    async def handle_login(request: Request):
+        """Login an existing user"""
+        try:
+            body = await request.json()
+            login_request = LoginRequest(**body)
+            response = login_user(login_request)
+            return JSONResponse(content=response.model_dump())
+        except Exception as e:
+            return JSONResponse(content={'error': str(e)}, status_code=401)
+    
+    async def handle_get_me(request: Request):
+        """Get current user information from auth token"""
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return JSONResponse(
+                content={'error': 'Missing or invalid Authorization header'}, 
+                status_code=401
+            )
+        
+        token = auth_header.split(' ')[1]
+        try:
+            user_info = get_user_from_token(token)
+            if not user_info:
+                return JSONResponse(content={'error': 'Invalid or expired token'}, status_code=401)
+            return JSONResponse(content=user_info.model_dump())
+        except Exception as e:
+            return JSONResponse(content={'error': str(e)}, status_code=401)
     
     # Get the HTTP app
     app = mcp.http_app()
+    
+    # Add authentication routes
+    auth_routes = [
+        Route('/auth/register', handle_register, methods=['POST']),
+        Route('/auth/login', handle_login, methods=['POST']),
+        Route('/auth/me', handle_get_me, methods=['GET']),
+    ]
+    
+    # Mount auth routes to the app
+    for route in auth_routes:
+        app.router.routes.insert(0, route)
     
     # Add CORS middleware to allow frontend requests
     app.add_middleware(
