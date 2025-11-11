@@ -4,8 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "bcrypt>=5.0.0",
     "fastmcp>=2.13.0.2",
+    "psycopg2-binary>=2.9.11",
     "pydantic>=2.12.4",
+    "pyjwt>=2.10.1",
     "requests>=2.32.5",
+    "sqlalchemy>=2.0.44",
     "uvicorn>=0.38.0",
 ]

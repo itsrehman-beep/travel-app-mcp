@@ -124,6 +124,21 @@ const parseSSE = async (response) => {
   if (!result) {
     throw new Error('No result found in SSE response')
   }
+  
+  return unwrapResult(result)
+}
+
+const unwrapResult = (result) => {
+  if (result.structuredContent?.result !== undefined) {
+    return result.structuredContent.result
+  }
+  if (result.content?.[0]?.text) {
+    try {
+      return JSON.parse(result.content[0].text)
+    } catch {
+      return result.content[0].text
+    }
+  }
   return result
 }
 
@@ -163,7 +178,7 @@ const callTool = async (toolName, args = {}) => {
     if (data.error) {
       throw new Error(data.error.message || 'API error')
     }
-    return data.result
+    return unwrapResult(data.result)
   }
 }
 
