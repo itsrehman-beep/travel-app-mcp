@@ -16,24 +16,13 @@ from models import (
     BookFlightRequest, BookHotelRequest, BookCarRequest, PendingBookingResponse
 )
 from sheets_client import sheets_client
-from auth import (
-    RegisterRequest, LoginRequest, AuthResponse,
-    extract_user_id_from_token,
-    JWT_SECRET, JWT_ALGORITHM
-)
-from services.auth_sync import create_user_with_session, login_user_with_session
+from auth_sheets import SheetsAuthService, RegisterRequest, LoginRequest, AuthTokenResponse
 
 # Initialize FastMCP server
 mcp = FastMCP("Travel Booking API")
 
-# Response model for authentication tools
-class AuthTokenResponse(BaseModel):
-    """Response model for authentication tools with session token"""
-    auth_token: str
-    token_type: str
-    user_id: str
-    email: str
-    expires_at: datetime
+# Initialize Google Sheets authentication service
+auth_service = SheetsAuthService(sheets_client)
 
 # ===== AUTHENTICATION TOOLS =====
 
@@ -41,8 +30,7 @@ class AuthTokenResponse(BaseModel):
 def register(email: str, password: str, first_name: Optional[str] = None, last_name: Optional[str] = None) -> AuthTokenResponse:
     """
     Register a new user account and receive an authentication token.
-    Creates user in both PostgreSQL (for auth) and Google Sheets (for data).
-    Also creates a session record in Google Sheets.
+    Creates user and session records in Google Sheets only - NO PostgreSQL.
     
     Args:
         email: User's email address (must be unique)
@@ -51,7 +39,7 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
         last_name: Optional last name
     
     Returns:
-        Authentication response with auth_token, user_id (format: USR0001), email, and expiration time
+        Authentication response with auth_token (bearer token), user_id (format: USR0001), email, and expiration time
     
     Raises:
         ValueError: If email already exists or validation fails
@@ -64,22 +52,7 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
             last_name=last_name
         )
         
-        # Use dual-write service to create user in both PostgreSQL and Google Sheets
-        auth_response = create_user_with_session(request)
-        
-        # Decode token to get expiration time
-        # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
-        assert JWT_SECRET is not None, "JWT_SECRET must be set"
-        payload = jwt.decode(auth_response.access_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        expires_at = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
-        
-        return AuthTokenResponse(
-            auth_token=auth_response.access_token,
-            token_type=auth_response.token_type,
-            user_id=auth_response.user_id,
-            email=auth_response.email,
-            expires_at=expires_at
-        )
+        return auth_service.register(request)
     except Exception as e:
         raise ValueError(f"Registration failed: {str(e)}")
 
@@ -87,37 +60,21 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
 def login(email: str, password: str) -> AuthTokenResponse:
     """
     Login with email and password to receive an authentication token.
-    Creates a new session record in Google Sheets with each login.
+    Verifies password from Google Sheets User table and creates Session record.
     
     Args:
         email: User's email address
         password: User's password
     
     Returns:
-        Authentication response with auth_token, user_id, email, and expiration time
+        Authentication response with auth_token (bearer token), user_id, email, and expiration time
     
     Raises:
-        ValueError: If credentials are invalid or user is deactivated
+        ValueError: If credentials are invalid
     """
     try:
         request = LoginRequest(email=email, password=password)
-        
-        # Use dual-write service to authenticate and create session
-        auth_response = login_user_with_session(request)
-        
-        # Decode token to get expiration time
-        # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
-        assert JWT_SECRET is not None, "JWT_SECRET must be set"
-        payload = jwt.decode(auth_response.access_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        expires_at = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
-        
-        return AuthTokenResponse(
-            auth_token=auth_response.access_token,
-            token_type=auth_response.token_type,
-            user_id=auth_response.user_id,
-            email=auth_response.email,
-            expires_at=expires_at
-        )
+        return auth_service.login(request)
     except Exception as e:
         raise ValueError(f"Login failed: {str(e)}")
 
@@ -917,15 +874,13 @@ def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> 
 # Helper function for authentication in MCP tools
 def require_user(auth_token: str) -> str:
     """
-    Validate auth token and return user_id.
-    Raises exception if token is invalid or missing.
+    Validate bearer token by checking Session table in Google Sheets.
+    Returns user_id if valid, raises exception if invalid or missing.
     """
-    from auth import extract_user_id_from_token
-    
     if not auth_token:
         raise Exception('Authentication required. Please provide auth_token.')
     
-    user_id = extract_user_id_from_token(auth_token)
+    user_id = auth_service.validate_token(auth_token)
     if not user_id:
         raise Exception('Invalid or expired authentication token.')
     
@@ -939,43 +894,32 @@ if __name__ == "__main__":
     from starlette.responses import JSONResponse
     from starlette.middleware.cors import CORSMiddleware
     from starlette.routing import Route
-    from auth import (
-        init_db, 
-        register_user, 
-        login_user, 
-        get_user_from_token,
-        RegisterRequest, 
-        LoginRequest
-    )
-    
-    # Initialize database tables
-    print("Initializing database...")
-    init_db()
-    print("Database initialized successfully!")
+    print("Starting Travel Booking API server...")
+    print("Authentication: Google Sheets only (NO PostgreSQL)")
     
     # Authentication route handlers
     async def handle_register(request: Request):
-        """Register a new user"""
+        """Register a new user - creates User and Session in Google Sheets"""
         try:
             body = await request.json()
             reg_request = RegisterRequest(**body)
-            response = register_user(reg_request)
+            response = auth_service.register(reg_request)
             return JSONResponse(content=response.model_dump(), status_code=201)
         except Exception as e:
             return JSONResponse(content={'error': str(e)}, status_code=400)
     
     async def handle_login(request: Request):
-        """Login an existing user"""
+        """Login an existing user - verifies password from Sheets and creates Session"""
         try:
             body = await request.json()
             login_request = LoginRequest(**body)
-            response = login_user(login_request)
+            response = auth_service.login(login_request)
             return JSONResponse(content=response.model_dump())
         except Exception as e:
             return JSONResponse(content={'error': str(e)}, status_code=401)
     
     async def handle_get_me(request: Request):
-        """Get current user information from auth token"""
+        """Get current user information from bearer token"""
         auth_header = request.headers.get('Authorization', '')
         if not auth_header or not auth_header.startswith('Bearer '):
             return JSONResponse(
@@ -985,10 +929,21 @@ if __name__ == "__main__":
         
         token = auth_header.split(' ')[1]
         try:
-            user_info = get_user_from_token(token)
-            if not user_info:
+            user_id = auth_service.validate_token(token)
+            if not user_id:
                 return JSONResponse(content={'error': 'Invalid or expired token'}, status_code=401)
-            return JSONResponse(content=user_info.model_dump())
+            
+            user = auth_service.get_user_by_id(user_id)
+            if not user:
+                return JSONResponse(content={'error': 'User not found'}, status_code=404)
+            
+            return JSONResponse(content={
+                'user_id': user.get('id'),
+                'email': user.get('email'),
+                'first_name': user.get('first_name'),
+                'last_name': user.get('last_name'),
+                'full_name': user.get('full_name')
+            })
         except Exception as e:
             return JSONResponse(content={'error': str(e)}, status_code=401)
     
