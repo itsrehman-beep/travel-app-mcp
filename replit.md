@@ -11,7 +11,7 @@ Do not make changes to the folder `Z`.
 Do not make changes to the file `Y`.
 
 ## System Architecture
-The application features a Python-based backend using FastMCP (v2.13.0.2) for REST-style endpoints with Pydantic validation, and a React + Vite frontend for a responsive UI. Full user authentication is implemented with JWT tokens and PostgreSQL database. The system supports multi-item booking flows (though currently focused on single-item booking for MVP) and real-time availability checks. Google Sheets serves as the persistent data store for travel data, integrated via Replit Connectors.
+The application features a Python-based backend using FastMCP (v2.13.0.2) for REST-style endpoints with Pydantic validation, and a React + Vite frontend for a responsive UI. Full user authentication is implemented with bearer tokens stored in Google Sheets (NO PostgreSQL). The system supports multi-item booking flows (though currently focused on single-item booking for MVP) and real-time availability checks. Google Sheets serves as the ONLY data store for ALL data including User and Session tables, integrated via Replit Connectors.
 
 ### UI/UX Decisions
 - **Modern Design**: Teal (#14b8a6) and coral (#f97316) color palette with gradient backgrounds
@@ -25,10 +25,10 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 - **Backend**: 
   - Python with FastMCP for API endpoints
   - Pydantic for data validation
-  - SQLAlchemy 2.0 for PostgreSQL database (user authentication)
-  - JWT authentication with bcrypt password hashing
+  - Bearer token authentication with bcrypt password hashing
   - REST endpoints for auth (/auth/register, /auth/login, /auth/me)
-  - Google Sheets integration for travel data
+  - Google Sheets integration for ALL data (User, Session, and travel data)
+  - NO PostgreSQL database
 - **Frontend**: 
   - React 18 with Vite for fast development
   - React Router v6 for client-side routing
@@ -37,13 +37,15 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
   - Protected routes requiring authentication
   - JWT token storage in localStorage
 - **Data Storage**: 
-  - PostgreSQL database for user accounts and sessions
-  - Google Sheets for travel-related entities (City, Airport, Flight, Hotel, Room, Car, Booking, FlightBooking, HotelBooking, CarBooking, Passenger, Payment)
+  - Google Sheets for ALL entities: User, Session, City, Airport, Flight, Hotel, Room, Car, Booking, FlightBooking, HotelBooking, CarBooking, Passenger, Payment (14 tables total)
+  - NO PostgreSQL database
 
 ### Feature Specifications
 - **Authentication**: 
   - User registration with email, password, first name, last name
-  - Login with JWT token generation (7-day expiration)
+  - Login with bearer token generation (7-day expiration)
+  - Bearer tokens stored in Google Sheets Session table
+  - Token validation by checking auth_token column in Session table
   - Protected routes requiring authentication
   - Automatic logout on token expiration
 - **Search**: 
@@ -62,8 +64,8 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
   - Date-overlap detection for hotels and cars
 
 ### System Design Choices
-- **ID Format**: Standardized prefix + zero-padded digits for all entities (e.g., BK0001 for Booking, PA00001 for Passenger, USR0001 for User).
-- **Authentication Workflow**: Register/Login -> Receive JWT Token -> Access Protected Routes
+- **ID Format**: Standardized prefix + zero-padded digits for all entities (e.g., BK0001 for Booking, PA00001 for Passenger, USR0001 for User, SES0001 for Session).
+- **Authentication Workflow**: Register/Login -> Receive Bearer Token -> Token Stored in Session Table (Google Sheets) -> Access Protected Routes by Validating Token in Session Table
 - **Booking Workflow**: Browse/Search (Public) -> Select Item -> Login (if not authenticated) -> Create Booking with auth_token (pending) -> Process Payment with auth_token (confirms booking).
 - **API Endpoints**: 
   - **REST Auth Endpoints** (Starlette): `/auth/register`, `/auth/login`, `/auth/me`
@@ -73,39 +75,36 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
     - **Booking Management (Protected)**: `book_flight(auth_token, ...)`, `book_hotel(auth_token, ...)`, `book_car(auth_token, ...)`, `process_payment(auth_token, ...)`, `get_booking()`, `cancel_booking()`, `update_passenger()`
 
 ## External Dependencies
-- **Google Sheets**: Used as the primary database for travel-related data.
-- **PostgreSQL**: User authentication database (Neon-backed via Replit).
+- **Google Sheets**: Used as the ONLY database for ALL data (User, Session, travel entities).
 - **FastMCP**: Python framework for building the backend API.
 - **React**: JavaScript library for building the user interface.
 - **React Router**: Client-side routing for React applications.
 - **Vite**: Frontend tooling for a fast development experience.
 - **Replit Connectors API**: Facilitates secure and efficient integration with Google Sheets.
 - **Pydantic**: Data validation and settings management for Python.
-- **SQLAlchemy**: ORM for PostgreSQL database interactions.
 - **bcrypt**: Password hashing for secure authentication.
-- **PyJWT**: JWT token generation and validation.
 
 ## Recent Changes
 
-### November 12, 2025
-- **Authentication MCP Tools**: Added `register()` and `login()` MCP tools for automation/agent scenarios
-  - Both tools return `AuthTokenResponse` with auth_token, user_id, email, expires_at
-  - Wraps existing auth services to maintain consistent JWT token format
-  - Dual authentication interfaces: REST endpoints for web app + MCP tools for agents
-  - Tools share same JWT secret and expiration settings (7 days)
+### November 12, 2025 (Latest)
+- **MAJOR REFACTOR: Google Sheets-Only Authentication**: Removed ALL PostgreSQL dependencies
+  - Deleted `backend/auth.py` (PostgreSQL User model, JWT functions)
+  - Deleted `backend/services/auth_sync.py` (dual-write service)
+  - Created `backend/auth_sheets.py` - SheetsAuthService class
+  - ALL authentication data now in Google Sheets (User and Session tables)
+  - Bearer tokens (NOT JWT) stored in Session table
+  - Token validation: Direct lookup in Session table with expiration check
+  - Sequential IDs: USR0001, SES0001 using `sheets_client.generate_next_id()`
+  - Authentication workflow:
+    - Register: Create User in Sheets → Create Session with bearer token → Return token
+    - Login: Verify password from Sheets User table → Create Session → Return token  
+    - Protected endpoints: Check bearer token in Session table, verify not expired
+  - Updated MCP tools and REST endpoints to use SheetsAuthService
+  - Server startup message: "Authentication: Google Sheets only (NO PostgreSQL)"
 
-- **Dual-Write Architecture**: Implemented synchronized writes to PostgreSQL and Google Sheets
-  - Created `backend/services/auth_sync.py` service layer
-  - User registration now creates:
-    - User record in PostgreSQL (for authentication)
-    - User record in Google Sheets User table (for data tracking)
-    - Session record in Google Sheets Session table
-  - Login creates Session record in Google Sheets
-  - Sequential ID generation using `sheets_client.generate_next_id()`
-  - User IDs: USR0001, USR0002, USR0003... (correct format)
-  - Session IDs: SES0001, SES0002, SES0003... (correct format)
-  - Transaction safety: SQL flush before Sheets writes to catch errors early
-  - Rollback protection: SQL transaction aborts if Sheets writes fail
+- **Earlier Work (Same Day)**:
+  - Added `register()` and `login()` MCP tools (later refactored to use Sheets-only auth)
+  - Initially implemented dual-write to PostgreSQL + Sheets (now removed in favor of Sheets-only)
 
 ### November 11, 2025
 - **Backend Authentication**: Added full JWT-based authentication system with PostgreSQL database

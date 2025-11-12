@@ -158,7 +158,7 @@ class SheetsAuthService:
         
         session_row = [
             session_id,
-            user.get("user_id"),
+            user.get("id"),
             auth_token,
             created_at,
             expires_at.isoformat()
