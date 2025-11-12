@@ -94,6 +94,19 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
   - Dual authentication interfaces: REST endpoints for web app + MCP tools for agents
   - Tools share same JWT secret and expiration settings (7 days)
 
+- **Dual-Write Architecture**: Implemented synchronized writes to PostgreSQL and Google Sheets
+  - Created `backend/services/auth_sync.py` service layer
+  - User registration now creates:
+    - User record in PostgreSQL (for authentication)
+    - User record in Google Sheets User table (for data tracking)
+    - Session record in Google Sheets Session table
+  - Login creates Session record in Google Sheets
+  - Sequential ID generation using `sheets_client.generate_next_id()`
+  - User IDs: USR0001, USR0002, USR0003... (correct format)
+  - Session IDs: SES0001, SES0002, SES0003... (correct format)
+  - Transaction safety: SQL flush before Sheets writes to catch errors early
+  - Rollback protection: SQL transaction aborts if Sheets writes fail
+
 ### November 11, 2025
 - **Backend Authentication**: Added full JWT-based authentication system with PostgreSQL database
   - Created `backend/auth.py` with User model, password hashing, JWT generation
