@@ -18,9 +18,10 @@ from models import (
 from sheets_client import sheets_client
 from auth import (
     RegisterRequest, LoginRequest, AuthResponse,
-    register_user, login_user, extract_user_id_from_token,
+    extract_user_id_from_token,
     JWT_SECRET, JWT_ALGORITHM
 )
+from services.auth_sync import create_user_with_session, login_user_with_session
 
 # Initialize FastMCP server
 mcp = FastMCP("Travel Booking API")
@@ -40,6 +41,8 @@ class AuthTokenResponse(BaseModel):
 def register(email: str, password: str, first_name: Optional[str] = None, last_name: Optional[str] = None) -> AuthTokenResponse:
     """
     Register a new user account and receive an authentication token.
+    Creates user in both PostgreSQL (for auth) and Google Sheets (for data).
+    Also creates a session record in Google Sheets.
     
     Args:
         email: User's email address (must be unique)
@@ -48,7 +51,7 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
         last_name: Optional last name
     
     Returns:
-        Authentication response with auth_token, user_id, email, and expiration time
+        Authentication response with auth_token, user_id (format: USR0001), email, and expiration time
     
     Raises:
         ValueError: If email already exists or validation fails
@@ -61,7 +64,8 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
             last_name=last_name
         )
         
-        auth_response = register_user(request)
+        # Use dual-write service to create user in both PostgreSQL and Google Sheets
+        auth_response = create_user_with_session(request)
         
         # Decode token to get expiration time
         # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
@@ -83,6 +87,7 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
 def login(email: str, password: str) -> AuthTokenResponse:
     """
     Login with email and password to receive an authentication token.
+    Creates a new session record in Google Sheets with each login.
     
     Args:
         email: User's email address
@@ -97,7 +102,8 @@ def login(email: str, password: str) -> AuthTokenResponse:
     try:
         request = LoginRequest(email=email, password=password)
         
-        auth_response = login_user(request)
+        # Use dual-write service to authenticate and create session
+        auth_response = login_user_with_session(request)
         
         # Decode token to get expiration time
         # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
