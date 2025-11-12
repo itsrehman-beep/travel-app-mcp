@@ -67,7 +67,8 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 - **Booking Workflow**: Browse/Search (Public) -> Select Item -> Login (if not authenticated) -> Create Booking with auth_token (pending) -> Process Payment with auth_token (confirms booking).
 - **API Endpoints**: 
   - **REST Auth Endpoints** (Starlette): `/auth/register`, `/auth/login`, `/auth/me`
-  - **MCP Tools** (13 total):
+  - **MCP Tools** (15 total):
+    - **Authentication**: `register(email, password, ...)`, `login(email, password)`
     - **Discovery (Public)**: `list_cities()`, `list_airports()`, `list_hotels()`, `list_rooms()`, `list_flights()`, `list_cars()`
     - **Booking Management (Protected)**: `book_flight(auth_token, ...)`, `book_hotel(auth_token, ...)`, `book_car(auth_token, ...)`, `process_payment(auth_token, ...)`, `get_booking()`, `cancel_booking()`, `update_passenger()`
 
@@ -84,7 +85,16 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 - **bcrypt**: Password hashing for secure authentication.
 - **PyJWT**: JWT token generation and validation.
 
-## Recent Changes (November 11, 2025)
+## Recent Changes
+
+### November 12, 2025
+- **Authentication MCP Tools**: Added `register()` and `login()` MCP tools for automation/agent scenarios
+  - Both tools return `AuthTokenResponse` with auth_token, user_id, email, expires_at
+  - Wraps existing auth services to maintain consistent JWT token format
+  - Dual authentication interfaces: REST endpoints for web app + MCP tools for agents
+  - Tools share same JWT secret and expiration settings (7 days)
+
+### November 11, 2025
 - **Backend Authentication**: Added full JWT-based authentication system with PostgreSQL database
   - Created `backend/auth.py` with User model, password hashing, JWT generation
   - Added REST endpoints for register/login/me

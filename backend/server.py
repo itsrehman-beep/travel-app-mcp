@@ -2,6 +2,8 @@ from fastmcp import FastMCP
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import re
+import jwt
+from pydantic import BaseModel
 from models import (
     Flight, FlightWithAvailability,
     Hotel, HotelWithCity, Room, RoomWithAvailability, RoomWithHotelInfo,
@@ -14,9 +16,104 @@ from models import (
     BookFlightRequest, BookHotelRequest, BookCarRequest, PendingBookingResponse
 )
 from sheets_client import sheets_client
+from auth import (
+    RegisterRequest, LoginRequest, AuthResponse,
+    register_user, login_user, extract_user_id_from_token,
+    JWT_SECRET, JWT_ALGORITHM
+)
 
 # Initialize FastMCP server
 mcp = FastMCP("Travel Booking API")
+
+# Response model for authentication tools
+class AuthTokenResponse(BaseModel):
+    """Response model for authentication tools with session token"""
+    auth_token: str
+    token_type: str
+    user_id: str
+    email: str
+    expires_at: datetime
+
+# ===== AUTHENTICATION TOOLS =====
+
+@mcp.tool()
+def register(email: str, password: str, first_name: Optional[str] = None, last_name: Optional[str] = None) -> AuthTokenResponse:
+    """
+    Register a new user account and receive an authentication token.
+    
+    Args:
+        email: User's email address (must be unique)
+        password: User's password (will be securely hashed)
+        first_name: Optional first name
+        last_name: Optional last name
+    
+    Returns:
+        Authentication response with auth_token, user_id, email, and expiration time
+    
+    Raises:
+        ValueError: If email already exists or validation fails
+    """
+    try:
+        request = RegisterRequest(
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name
+        )
+        
+        auth_response = register_user(request)
+        
+        # Decode token to get expiration time
+        # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
+        assert JWT_SECRET is not None, "JWT_SECRET must be set"
+        payload = jwt.decode(auth_response.access_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        expires_at = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
+        
+        return AuthTokenResponse(
+            auth_token=auth_response.access_token,
+            token_type=auth_response.token_type,
+            user_id=auth_response.user_id,
+            email=auth_response.email,
+            expires_at=expires_at
+        )
+    except Exception as e:
+        raise ValueError(f"Registration failed: {str(e)}")
+
+@mcp.tool()
+def login(email: str, password: str) -> AuthTokenResponse:
+    """
+    Login with email and password to receive an authentication token.
+    
+    Args:
+        email: User's email address
+        password: User's password
+    
+    Returns:
+        Authentication response with auth_token, user_id, email, and expiration time
+    
+    Raises:
+        ValueError: If credentials are invalid or user is deactivated
+    """
+    try:
+        request = LoginRequest(email=email, password=password)
+        
+        auth_response = login_user(request)
+        
+        # Decode token to get expiration time
+        # JWT_SECRET is guaranteed to exist (checked in auth.py initialization)
+        assert JWT_SECRET is not None, "JWT_SECRET must be set"
+        payload = jwt.decode(auth_response.access_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        expires_at = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
+        
+        return AuthTokenResponse(
+            auth_token=auth_response.access_token,
+            token_type=auth_response.token_type,
+            user_id=auth_response.user_id,
+            email=auth_response.email,
+            expires_at=expires_at
+        )
+    except Exception as e:
+        raise ValueError(f"Login failed: {str(e)}")
 
 # ===== BASIC LISTING TOOLS =====
 
