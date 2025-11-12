@@ -57,7 +57,9 @@ def create_user_with_session(request: RegisterRequest) -> AuthResponse:
         )
         
         db.add(new_user)
-        db.commit()
+        # Flush to catch integrity errors (unique email, etc.) BEFORE Sheets writes
+        # This triggers SQL constraints without committing the transaction
+        db.flush()
         
         # Step 4: Write user to Google Sheets (NEVER store plaintext password!)
         # Store password_hash for consistency, or use a sentinel value
@@ -74,9 +76,8 @@ def create_user_with_session(request: RegisterRequest) -> AuthResponse:
         
         sheets_success = sheets_client.append_row('User', user_row)
         if not sheets_success:
-            # Rollback: deactivate SQL user if Sheets write fails
-            new_user.is_active = False
-            db.commit()
+            # Rollback: abort transaction before committing
+            db.rollback()
             raise Exception('Failed to write user to Google Sheets')
         
         # Step 5: Generate JWT token
@@ -99,8 +100,12 @@ def create_user_with_session(request: RegisterRequest) -> AuthResponse:
         
         session_success = sheets_client.append_row('Session', session_row)
         if not session_success:
-            # Non-critical: JWT still works, just log warning
-            print(f"Warning: Failed to create session record for user {user_id}")
+            # Critical: Session creation is part of registration contract
+            db.rollback()
+            raise Exception('Failed to create session in Google Sheets')
+        
+        # ONLY NOW commit to PostgreSQL after both Sheets writes succeeded
+        db.commit()
         
         return AuthResponse(
             access_token=token,
