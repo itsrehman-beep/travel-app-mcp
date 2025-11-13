@@ -1027,21 +1027,32 @@ if __name__ == "__main__":
         except Exception as e:
             return JSONResponse(content={'error': str(e)}, status_code=401)
     
-    async def handle_get_me(request: Request):
-        """Get current user information from bearer token"""
+    # Custom exception for authentication errors
+    class AuthenticationError(Exception):
+        """Raised when authentication fails (401)"""
+        pass
+    
+    # Shared helper to extract and validate user from bearer token
+    def extract_user_id_from_request(request: Request) -> str:
+        """
+        Extract and validate user_id from Authorization header.
+        Raises AuthenticationError for auth issues, allows other exceptions to bubble.
+        """
         auth_header = request.headers.get('Authorization', '')
         if not auth_header or not auth_header.startswith('Bearer '):
-            return JSONResponse(
-                content={'error': 'Missing or invalid Authorization header'}, 
-                status_code=401
-            )
+            raise AuthenticationError('Missing or invalid Authorization header')
         
         token = auth_header.split(' ')[1]
+        user_id = auth_service.validate_token(token)
+        if not user_id:
+            raise AuthenticationError('Invalid or expired token')
+        
+        return user_id
+    
+    async def handle_get_me(request: Request):
+        """Get current user information from bearer token"""
         try:
-            user_id = auth_service.validate_token(token)
-            if not user_id:
-                return JSONResponse(content={'error': 'Invalid or expired token'}, status_code=401)
-            
+            user_id = extract_user_id_from_request(request)
             user = auth_service.get_user_by_id(user_id)
             if not user:
                 return JSONResponse(content={'error': 'User not found'}, status_code=404)
@@ -1053,17 +1064,47 @@ if __name__ == "__main__":
                 'last_name': user.get('last_name'),
                 'full_name': user.get('full_name')
             })
-        except Exception as e:
+        except AuthenticationError as e:
             return JSONResponse(content={'error': str(e)}, status_code=401)
+        except Exception as e:
+            print(f"Server error in /auth/me: {e}")
+            return JSONResponse(content={'error': 'Internal server error'}, status_code=500)
+    
+    async def handle_get_bookings(request: Request):
+        """Get all bookings for authenticated user - reads token from Authorization header"""
+        try:
+            user_id = extract_user_id_from_request(request)
+            bookings = _build_booking_list(user_id)
+            return JSONResponse(content=[b.model_dump() for b in bookings])
+        except AuthenticationError as e:
+            return JSONResponse(content={'error': str(e)}, status_code=401)
+        except Exception as e:
+            print(f"Server error in /bookings: {e}")
+            return JSONResponse(content={'error': 'Internal server error'}, status_code=500)
+    
+    async def handle_get_pending_bookings(request: Request):
+        """Get pending bookings for authenticated user - reads token from Authorization header"""
+        try:
+            user_id = extract_user_id_from_request(request)
+            all_bookings = _build_booking_list(user_id)
+            pending = [b for b in all_bookings if b.status == "pending"]
+            return JSONResponse(content=[b.model_dump() for b in pending])
+        except AuthenticationError as e:
+            return JSONResponse(content={'error': str(e)}, status_code=401)
+        except Exception as e:
+            print(f"Server error in /bookings/pending: {e}")
+            return JSONResponse(content={'error': 'Internal server error'}, status_code=500)
     
     # Get the HTTP app
     app = mcp.http_app()
     
-    # Add authentication routes
+    # Add authentication and booking routes
     auth_routes = [
         Route('/auth/register', handle_register, methods=['POST']),
         Route('/auth/login', handle_login, methods=['POST']),
         Route('/auth/me', handle_get_me, methods=['GET']),
+        Route('/bookings', handle_get_bookings, methods=['GET']),
+        Route('/bookings/pending', handle_get_pending_bookings, methods=['GET']),
     ]
     
     # Mount auth routes to the app

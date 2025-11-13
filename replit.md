@@ -68,8 +68,13 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 - **Authentication Workflow**: Register/Login -> Receive Bearer Token -> Token Stored in Session Table (Google Sheets) -> Access Protected Routes by Validating Token in Session Table
 - **Booking Workflow**: Browse/Search (Public) -> Select Item -> Login (if not authenticated) -> Create Booking with auth_token (pending) -> Process Payment with auth_token (confirms booking).
 - **API Endpoints**: 
-  - **REST Auth Endpoints** (Starlette): `/auth/register`, `/auth/login`, `/auth/me`
-  - **MCP Tools** (17 total):
+  - **REST Endpoints** (Starlette, header-based auth):
+    - `/auth/register` (POST) - Create new user account
+    - `/auth/login` (POST) - Login and receive bearer token
+    - `/auth/me` (GET) - Get current user info (requires Authorization header)
+    - `/bookings` (GET) - Get all user bookings (requires Authorization header)
+    - `/bookings/pending` (GET) - Get pending bookings (requires Authorization header)
+  - **MCP Tools** (17 total, parameter-based auth):
     - **Authentication**: `register(email, password, ...)`, `login(email, password)`
     - **Discovery (Public)**: `list_cities()`, `list_airports()`, `list_hotels()`, `list_rooms()`, `list_flights()`, `list_cars()`
     - **Booking Management (Protected)**: `book_flight(auth_token, ...)`, `book_hotel(auth_token, ...)`, `book_car(auth_token, ...)`, `process_payment(auth_token, ...)`, `get_booking()`, `cancel_booking()`, `update_passenger()`, `get_user_bookings(auth_token)`, `get_pending_bookings(auth_token)`
@@ -87,6 +92,22 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 ## Recent Changes
 
 ### November 13, 2025 (Latest)
+- **CRITICAL BUG FIX: Google Sheets OAuth Token Expiration**: Fixed backend crash due to expired access tokens
+  - Root cause: `sheets_client.py` was caching OAuth access token indefinitely without checking expiration
+  - Google Sheets access tokens expire after 1 hour, causing all API calls to fail
+  - Fixed: Now checks `expires_at` field before reusing cached token
+  - Auto-refreshes token from Replit Connectors API when expired
+  - Installed `python-dateutil` for proper ISO 8601 date parsing
+  - Better error messages when Google Sheets connection fails
+
+- **NEW FEATURE: REST Endpoints for Booking Retrieval**: Added header-based authentication for user bookings
+  - Created REST endpoints: `GET /bookings` and `GET /bookings/pending`
+  - Both endpoints read bearer token from `Authorization: Bearer <token>` header (NOT request body)
+  - Shared helper `extract_user_id_from_request()` centralizes token validation logic
+  - Kept existing MCP tools `get_user_bookings(auth_token)` and `get_pending_bookings(auth_token)` for backward compatibility
+  - MCP tools still require explicit auth_token parameter (MCP protocol limitation - cannot read HTTP headers)
+  - Frontend can now use proper RESTful pattern with Authorization headers
+
 - **CRITICAL BUG FIX: Login Duplicate User Rows**: Fixed bug where login created duplicate User rows instead of updating last_login field
   - Root cause: `update_row()` in `sheets_client.py` was incorrectly adding `+1` to row_index
   - Fixed method to use correct 1-indexed row numbers (row 1 = header, row 2 = first data)
