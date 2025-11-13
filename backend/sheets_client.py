@@ -122,8 +122,7 @@ class SheetsClient:
             raise ValueError(f'Unknown table name: {table_name}')
         
         access_token = self._get_access_token()
-        # row_index + 1 because row 1 is headers, so data starts at row 2
-        range_name = f"'{sheet_name}'!A{row_index + 1}:Z{row_index + 1}"
+        range_name = f"'{sheet_name}'!A{row_index}:Z{row_index}"
         url = f'https://sheets.googleapis.com/v4/spreadsheets/{self.SPREADSHEET_ID}/values/{range_name}?valueInputOption=RAW'
         headers = {
             'Authorization': f'Bearer {access_token}',

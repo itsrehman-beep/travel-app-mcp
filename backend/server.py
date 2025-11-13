@@ -728,8 +728,7 @@ def cancel_booking(booking_id: str) -> Dict[str, Any]:
         booking['booked_at'],
         booking['total_price']
     ]
-    # Fix: row_index from find_row_by_id is absolute sheet row, subtract 1 for update_row
-    sheets_client.update_row('Booking', row_index - 1, booking_data)
+    sheets_client.update_row('Booking', row_index, booking_data)
     
     # Update payment status to refunded
     payments = sheets_client.read_sheet('Payment')
@@ -744,8 +743,7 @@ def cancel_booking(booking_id: str) -> Dict[str, Any]:
                 'refunded',  # Update status
                 payment.get('transaction_ref', '')
             ]
-            # Fix: idx is 0-based, +1 for update_row's expected 1-based data row index
-            sheets_client.update_row('Payment', idx + 1, payment_data)
+            sheets_client.update_row('Payment', idx + 2, payment_data)
             break
     
     return {
@@ -790,8 +788,7 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
         passenger.get('dob', ''),
         passenger.get('passport_no', '')
     ]
-    # Fix: row_index from find_row_by_id is absolute sheet row, subtract 1 for update_row
-    sheets_client.update_row('Passenger', row_index - 1, passenger_data)
+    sheets_client.update_row('Passenger', row_index, passenger_data)
     
     return {
         'success': True,
@@ -858,7 +855,7 @@ def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> 
         booking['booked_at'],
         booking['total_price']
     ]
-    sheets_client.update_row('Booking', row_index - 1, booking_data)
+    sheets_client.update_row('Booking', row_index, booking_data)
     
     return {
         'success': True,
@@ -870,6 +867,96 @@ def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> 
         'paid_at': now.isoformat(),
         'booking_status': 'confirmed'
     }
+
+@mcp.tool()
+def get_user_bookings(auth_token: str) -> List[BookingResponse]:
+    """
+    Get all bookings for the authenticated user with complete details.
+    
+    Args:
+        auth_token: Bearer authentication token from login
+    
+    Returns:
+        List of all user's bookings with status, prices, and booking details
+    """
+    user_id = require_user(auth_token)
+    
+    bookings = sheets_client.read_sheet('Booking')
+    user_bookings = [b for b in bookings if b.get('user_id') == user_id]
+    
+    if not user_bookings:
+        return []
+    
+    flight_bookings = sheets_client.read_sheet('FlightBooking')
+    hotel_bookings = sheets_client.read_sheet('HotelBooking')
+    car_bookings = sheets_client.read_sheet('CarBooking')
+    passengers = sheets_client.read_sheet('Passenger')
+    payments = sheets_client.read_sheet('Payment')
+    
+    result = []
+    for booking in user_bookings:
+        booking_id = booking.get('id')
+        
+        flight_booking = next((fb for fb in flight_bookings if fb.get('booking_id') == booking_id), None)
+        hotel_booking = next((hb for hb in hotel_bookings if hb.get('booking_id') == booking_id), None)
+        car_booking = next((cb for cb in car_bookings if cb.get('booking_id') == booking_id), None)
+        booking_passengers = [p.get('id') for p in passengers if p.get('booking_id') == booking_id]
+        payment = next((p for p in payments if p.get('booking_id') == booking_id), None)
+        
+        booking_response = BookingResponse(
+            booking_id=booking_id or "",
+            user_id=booking.get('user_id') or "",
+            status=booking.get('status') or "pending",
+            booked_at=datetime.fromisoformat(booking.get('booked_at')) if booking.get('booked_at') else datetime.now(),
+            total_amount=float(booking.get('total_price', 0)),
+            flight_booking=FlightBookingSummary(
+                id=flight_booking.get('id'),
+                flight_id=flight_booking.get('flight_id'),
+                seat_class=flight_booking.get('seat_class'),
+                passengers=int(flight_booking.get('passengers', 0))
+            ) if flight_booking else None,
+            hotel_booking=HotelBookingSummary(
+                id=hotel_booking.get('id'),
+                room_id=hotel_booking.get('room_id'),
+                check_in=date.fromisoformat(hotel_booking.get('check_in')),
+                check_out=date.fromisoformat(hotel_booking.get('check_out')),
+                guests=int(hotel_booking.get('guests', 0))
+            ) if hotel_booking else None,
+            car_booking=CarBookingSummary(
+                id=car_booking.get('id'),
+                car_id=car_booking.get('car_id'),
+                pickup_time=datetime.fromisoformat(car_booking.get('pickup_time')),
+                dropoff_time=datetime.fromisoformat(car_booking.get('dropoff_time')),
+                pickup_location=car_booking.get('pickup_location'),
+                dropoff_location=car_booking.get('dropoff_location')
+            ) if car_booking else None,
+            passenger_ids=booking_passengers,
+            payment=PaymentSummary(
+                id=payment.get('id'),
+                method=payment.get('method'),
+                amount=float(payment.get('amount', 0)),
+                paid_at=datetime.fromisoformat(payment.get('paid_at')) if payment.get('paid_at') else datetime.now(),
+                status=payment.get('status'),
+                transaction_ref=payment.get('transaction_ref')
+            ) if payment else None
+        )
+        result.append(booking_response)
+    
+    return result
+
+@mcp.tool()
+def get_pending_bookings(auth_token: str) -> List[BookingResponse]:
+    """
+    Get all pending bookings for the authenticated user (bookings awaiting payment).
+    
+    Args:
+        auth_token: Bearer authentication token from login
+    
+    Returns:
+        List of pending bookings that need payment to be confirmed
+    """
+    all_bookings = get_user_bookings(auth_token)
+    return [b for b in all_bookings if b.status == "pending"]
 
 # Helper function for authentication in MCP tools
 def require_user(auth_token: str) -> str:
