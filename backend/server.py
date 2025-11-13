@@ -868,19 +868,8 @@ def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> 
         'booking_status': 'confirmed'
     }
 
-@mcp.tool()
-def get_user_bookings(auth_token: str) -> List[BookingResponse]:
-    """
-    Get all bookings for the authenticated user with complete details.
-    
-    Args:
-        auth_token: Bearer authentication token from login
-    
-    Returns:
-        List of all user's bookings with status, prices, and booking details
-    """
-    user_id = require_user(auth_token)
-    
+def _build_booking_list(user_id: str) -> List[BookingResponse]:
+    """Helper function to build list of bookings for a user"""
     bookings = sheets_client.read_sheet('Booking')
     user_bookings = [b for b in bookings if b.get('user_id') == user_id]
     
@@ -896,53 +885,85 @@ def get_user_bookings(auth_token: str) -> List[BookingResponse]:
     result = []
     for booking in user_bookings:
         booking_id = booking.get('id')
+        if not booking_id:
+            continue
         
         flight_booking = next((fb for fb in flight_bookings if fb.get('booking_id') == booking_id), None)
         hotel_booking = next((hb for hb in hotel_bookings if hb.get('booking_id') == booking_id), None)
         car_booking = next((cb for cb in car_bookings if cb.get('booking_id') == booking_id), None)
-        booking_passengers = [p.get('id') for p in passengers if p.get('booking_id') == booking_id]
+        booking_passengers = [p.get('id') for p in passengers if p.get('booking_id') == booking_id and p.get('id')]
         payment = next((p for p in payments if p.get('booking_id') == booking_id), None)
         
-        booking_response = BookingResponse(
-            booking_id=booking_id or "",
-            user_id=booking.get('user_id') or "",
-            status=booking.get('status') or "pending",
-            booked_at=datetime.fromisoformat(booking.get('booked_at')) if booking.get('booked_at') else datetime.now(),
-            total_amount=float(booking.get('total_price', 0)),
-            flight_booking=FlightBookingSummary(
-                id=flight_booking.get('id'),
-                flight_id=flight_booking.get('flight_id'),
-                seat_class=flight_booking.get('seat_class'),
+        flight_summary = None
+        if flight_booking and flight_booking.get('id') and flight_booking.get('flight_id') and flight_booking.get('seat_class'):
+            flight_summary = FlightBookingSummary(
+                id=flight_booking['id'],
+                flight_id=flight_booking['flight_id'],
+                seat_class=flight_booking['seat_class'],
                 passengers=int(flight_booking.get('passengers', 0))
-            ) if flight_booking else None,
-            hotel_booking=HotelBookingSummary(
-                id=hotel_booking.get('id'),
-                room_id=hotel_booking.get('room_id'),
-                check_in=date.fromisoformat(hotel_booking.get('check_in')),
-                check_out=date.fromisoformat(hotel_booking.get('check_out')),
+            )
+        
+        hotel_summary = None
+        if hotel_booking and hotel_booking.get('id') and hotel_booking.get('room_id') and hotel_booking.get('check_in') and hotel_booking.get('check_out'):
+            hotel_summary = HotelBookingSummary(
+                id=hotel_booking['id'],
+                room_id=hotel_booking['room_id'],
+                check_in=date.fromisoformat(hotel_booking['check_in']),
+                check_out=date.fromisoformat(hotel_booking['check_out']),
                 guests=int(hotel_booking.get('guests', 0))
-            ) if hotel_booking else None,
-            car_booking=CarBookingSummary(
-                id=car_booking.get('id'),
-                car_id=car_booking.get('car_id'),
-                pickup_time=datetime.fromisoformat(car_booking.get('pickup_time')),
-                dropoff_time=datetime.fromisoformat(car_booking.get('dropoff_time')),
-                pickup_location=car_booking.get('pickup_location'),
-                dropoff_location=car_booking.get('dropoff_location')
-            ) if car_booking else None,
-            passenger_ids=booking_passengers,
-            payment=PaymentSummary(
-                id=payment.get('id'),
-                method=payment.get('method'),
+            )
+        
+        car_summary = None
+        if car_booking and car_booking.get('id') and car_booking.get('car_id') and car_booking.get('pickup_time') and car_booking.get('dropoff_time'):
+            car_summary = CarBookingSummary(
+                id=car_booking['id'],
+                car_id=car_booking['car_id'],
+                pickup_time=datetime.fromisoformat(car_booking['pickup_time']),
+                dropoff_time=datetime.fromisoformat(car_booking['dropoff_time']),
+                pickup_location=car_booking.get('pickup_location', ''),
+                dropoff_location=car_booking.get('dropoff_location', '')
+            )
+        
+        payment_summary = None
+        if payment and payment.get('id') and payment.get('paid_at'):
+            payment_summary = PaymentSummary(
+                id=payment['id'],
+                method=payment.get('method', ''),
                 amount=float(payment.get('amount', 0)),
-                paid_at=datetime.fromisoformat(payment.get('paid_at')) if payment.get('paid_at') else datetime.now(),
-                status=payment.get('status'),
-                transaction_ref=payment.get('transaction_ref')
-            ) if payment else None
+                paid_at=datetime.fromisoformat(payment['paid_at']),
+                status=payment.get('status', ''),
+                transaction_ref=payment.get('transaction_ref', '')
+            )
+        
+        booking_response = BookingResponse(
+            booking_id=booking_id,
+            user_id=booking.get('user_id', ''),
+            status=booking.get('status', 'pending'),
+            booked_at=datetime.fromisoformat(booking['booked_at']) if booking.get('booked_at') else datetime.now(),
+            total_amount=float(booking.get('total_price', 0)),
+            flight_booking=flight_summary,
+            hotel_booking=hotel_summary,
+            car_booking=car_summary,
+            passenger_ids=booking_passengers,
+            payment=payment_summary
         )
         result.append(booking_response)
     
     return result
+
+@mcp.tool()
+def get_user_bookings(auth_token: str) -> List[BookingResponse]:
+    """
+    Get all bookings for the authenticated user with complete details.
+    
+    Args:
+        auth_token: Bearer authentication token from login
+    
+    Returns:
+        List of all user's bookings with status, prices, and booking details
+    """
+    user_id = require_user(auth_token)
+    return _build_booking_list(user_id)
 
 @mcp.tool()
 def get_pending_bookings(auth_token: str) -> List[BookingResponse]:
@@ -955,7 +976,8 @@ def get_pending_bookings(auth_token: str) -> List[BookingResponse]:
     Returns:
         List of pending bookings that need payment to be confirmed
     """
-    all_bookings = get_user_bookings(auth_token)
+    user_id = require_user(auth_token)
+    all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 
 # Helper function for authentication in MCP tools
