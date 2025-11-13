@@ -41,7 +41,6 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, firstName, lastName) => {
     const data = await authUtils.register(email, password, firstName, lastName)
-    setUser(authUtils.getUser())
     return data
   }
 

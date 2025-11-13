@@ -16,7 +16,7 @@ from models import (
     BookFlightRequest, BookHotelRequest, BookCarRequest, PendingBookingResponse
 )
 from sheets_client import sheets_client
-from auth_sheets import SheetsAuthService, RegisterRequest, LoginRequest, AuthTokenResponse
+from auth_sheets import SheetsAuthService, RegisterRequest, LoginRequest, AuthTokenResponse, UserResponse
 
 # Initialize FastMCP server
 mcp = FastMCP("Travel Booking API")
@@ -27,10 +27,10 @@ auth_service = SheetsAuthService(sheets_client)
 # ===== AUTHENTICATION TOOLS =====
 
 @mcp.tool()
-def register(email: str, password: str, first_name: Optional[str] = None, last_name: Optional[str] = None) -> AuthTokenResponse:
+def register(email: str, password: str, first_name: Optional[str] = None, last_name: Optional[str] = None) -> UserResponse:
     """
-    Register a new user account and receive an authentication token.
-    Creates user and session records in Google Sheets only - NO PostgreSQL.
+    Register a new user account. Creates ONLY User record in Google Sheets (NOT Session).
+    User must call login() separately to receive auth_token for protected endpoints.
     
     Args:
         email: User's email address (must be unique)
@@ -39,7 +39,7 @@ def register(email: str, password: str, first_name: Optional[str] = None, last_n
         last_name: Optional last name
     
     Returns:
-        Authentication response with auth_token (bearer token), user_id (format: USR0001), email, and expiration time
+        User details with user_id (format: USR0001) and email
     
     Raises:
         ValueError: If email already exists or validation fails

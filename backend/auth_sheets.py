@@ -23,6 +23,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserResponse(BaseModel):
+    user_id: str
+    email: str
+
+
 class AuthTokenResponse(BaseModel):
     auth_token: str
     user_id: str
@@ -90,9 +95,13 @@ class SheetsAuthService:
         
         return None
     
-    def register(self, request: RegisterRequest) -> AuthTokenResponse:
+    def register(self, request: RegisterRequest) -> UserResponse:
         """
-        Register a new user - creates User and Session in Google Sheets only
+        Register a new user - creates ONLY User in Google Sheets (NOT Session).
+        User must login separately to get auth token.
+        
+        User table schema (7 columns):
+        [id, email, password, full_name, role, created_at, last_login]
         """
         if self.get_user_by_email(request.email):
             raise ValueError(f"User with email {request.email} already exists")
@@ -108,34 +117,17 @@ class SheetsAuthService:
             user_id,
             request.email,
             password_hash,
-            request.first_name or "",
-            request.last_name or "",
             full_name,
+            "user",
             created_at,
-            created_at
+            ""
         ]
         
         self.sheets.append_row("User", user_row)
         
-        auth_token = generate_auth_token()
-        session_id = self.sheets.generate_next_id("Session", "SES")
-        expires_at = datetime.now(timezone.utc) + timedelta(days=self.token_expiry_days)
-        
-        session_row = [
-            session_id,
-            user_id,
-            auth_token,
-            created_at,
-            expires_at.isoformat()
-        ]
-        
-        self.sheets.append_row("Session", session_row)
-        
-        return AuthTokenResponse(
-            auth_token=auth_token,
+        return UserResponse(
             user_id=user_id,
-            email=request.email,
-            expires_at=expires_at.isoformat()
+            email=request.email
         )
     
     def login(self, request: LoginRequest) -> AuthTokenResponse:
@@ -147,7 +139,7 @@ class SheetsAuthService:
         if not user:
             raise ValueError("Invalid email or password")
         
-        password_hash = user.get("password_hash")
+        password_hash = user.get("password")
         if not password_hash or not verify_password(request.password, password_hash):
             raise ValueError("Invalid email or password")
         
@@ -169,9 +161,16 @@ class SheetsAuthService:
         users = self.sheets.read_sheet("User")
         for i, u in enumerate(users):
             if u.get("id") == user.get("id"):
-                user_data_row = list(user.values())
-                user_data_row[7] = created_at
-                self.sheets.update_row("User", i + 1, user_data_row)
+                updated_user_row = [
+                    user.get("id"),
+                    user.get("email"),
+                    user.get("password"),
+                    user.get("full_name"),
+                    user.get("role", "user"),
+                    user.get("created_at"),
+                    created_at
+                ]
+                self.sheets.update_row("User", i + 2, updated_user_row)
                 break
         
         return AuthTokenResponse(

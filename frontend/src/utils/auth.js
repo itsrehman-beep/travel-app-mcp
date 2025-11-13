@@ -45,16 +45,6 @@ export const authUtils = {
       throw new Error(data.error || 'Registration failed')
     }
     
-    if (data.token) {
-      authUtils.setToken(data.token)
-      authUtils.setUser({
-        id: data.user_id,
-        email: data.email,
-        firstName: data.first_name,
-        lastName: data.last_name
-      })
-    }
-    
     return data
   },
   

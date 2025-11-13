@@ -41,7 +41,13 @@ export const Register = () => {
 
     try {
       await register(formData.email, formData.password, formData.firstName, formData.lastName)
-      navigate('/')
+      navigate('/login', { 
+        state: { 
+          registered: true, 
+          message: 'Registration successful! Please log in with your new account.',
+          email: formData.email
+        } 
+      })
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.')
     } finally {
