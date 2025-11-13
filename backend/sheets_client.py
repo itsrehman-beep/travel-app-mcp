@@ -28,13 +28,22 @@ class SheetsClient:
     }
     
     def __init__(self):
-        self._access_token = None
+        self._connection_settings = None
     
     def _get_access_token(self) -> str:
         """Get Google Sheets access token from Replit Connectors API"""
-        if self._access_token:
-            return self._access_token
-            
+        # Check if cached token is still valid
+        if self._connection_settings:
+            settings = self._connection_settings.get('settings', {})
+            expires_at = settings.get('expires_at')
+            if expires_at:
+                from dateutil import parser
+                expiry_time = parser.isoparse(expires_at)
+                if datetime.now(expiry_time.tzinfo) < expiry_time:
+                    # Token still valid, return cached token
+                    return settings.get('access_token')
+        
+        # Token expired or not cached, fetch a new one
         hostname = os.environ.get('REPLIT_CONNECTORS_HOSTNAME')
         x_replit_token = None
         
@@ -56,15 +65,15 @@ class SheetsClient:
         data = response.json()
         
         if 'items' not in data or len(data['items']) == 0:
-            raise Exception('Google Sheets connection not found')
+            raise Exception('Google Sheets connection not found. Please reconnect Google Sheets in the Replit UI.')
         
         connection_settings = data['items'][0]
         access_token = connection_settings.get('settings', {}).get('access_token')
         
         if not access_token:
-            raise Exception('Access token not found in connection settings')
+            raise Exception('Access token not found. Please reconnect Google Sheets in the Replit UI.')
         
-        self._access_token = access_token
+        self._connection_settings = connection_settings
         return access_token
     
     def read_sheet(self, table_name: str) -> List[Dict[str, Any]]:
