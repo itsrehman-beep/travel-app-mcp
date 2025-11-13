@@ -69,10 +69,10 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 - **Booking Workflow**: Browse/Search (Public) -> Select Item -> Login (if not authenticated) -> Create Booking with auth_token (pending) -> Process Payment with auth_token (confirms booking).
 - **API Endpoints**: 
   - **REST Auth Endpoints** (Starlette): `/auth/register`, `/auth/login`, `/auth/me`
-  - **MCP Tools** (15 total):
+  - **MCP Tools** (17 total):
     - **Authentication**: `register(email, password, ...)`, `login(email, password)`
     - **Discovery (Public)**: `list_cities()`, `list_airports()`, `list_hotels()`, `list_rooms()`, `list_flights()`, `list_cars()`
-    - **Booking Management (Protected)**: `book_flight(auth_token, ...)`, `book_hotel(auth_token, ...)`, `book_car(auth_token, ...)`, `process_payment(auth_token, ...)`, `get_booking()`, `cancel_booking()`, `update_passenger()`
+    - **Booking Management (Protected)**: `book_flight(auth_token, ...)`, `book_hotel(auth_token, ...)`, `book_car(auth_token, ...)`, `process_payment(auth_token, ...)`, `get_booking()`, `cancel_booking()`, `update_passenger()`, `get_user_bookings(auth_token)`, `get_pending_bookings(auth_token)`
 
 ## External Dependencies
 - **Google Sheets**: Used as the ONLY database for ALL data (User, Session, travel entities).
@@ -86,7 +86,32 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 
 ## Recent Changes
 
-### November 12, 2025 (Latest)
+### November 13, 2025 (Latest)
+- **CRITICAL BUG FIX: Login Duplicate User Rows**: Fixed bug where login created duplicate User rows instead of updating last_login field
+  - Root cause: `update_row()` in `sheets_client.py` was incorrectly adding `+1` to row_index
+  - Fixed method to use correct 1-indexed row numbers (row 1 = header, row 2 = first data)
+  - Updated all 4 callers in `server.py` that were compensating for the bug:
+    * `cancel_booking` (Booking and Payment updates)
+    * `update_passenger`
+    * `process_payment`
+  - Login now properly updates last_login field in existing User row without creating duplicates
+
+- **NEW FEATURE: Booking History Tools**: Added two new MCP tools for viewing user bookings
+  - `get_user_bookings(auth_token)`: Returns all bookings for authenticated user with complete details (status, prices, flight/hotel/car info, passengers, payment)
+  - `get_pending_bookings(auth_token)`: Returns only pending bookings awaiting payment
+  - Both tools return `List[BookingResponse]` with full booking details joined from all related tables
+  - Proper null/None handling and type safety with validation before creating Summary objects
+  - Helper function `_build_booking_list(user_id)` consolidates shared logic
+
+- **AUTHENTICATION FLOW REFINEMENT**: Updated registration to be true two-step process
+  - `register()` now creates ONLY User row (no Session)
+  - Returns `UserResponse` with just `{user_id, email}` (no auth_token)
+  - Frontend redirects to `/login` after registration with success message and prefilled email
+  - User must call `login()` separately to receive Session token and authenticate
+  - Frontend updated: `auth.js`, `AuthContext.jsx`, `Register.jsx`, `Login.jsx`
+  - Success message displays: "Registration successful! Please log in with your new account"
+
+### November 12, 2025
 - **MAJOR REFACTOR: Google Sheets-Only Authentication**: Removed ALL PostgreSQL dependencies
   - Deleted `backend/auth.py` (PostgreSQL User model, JWT functions)
   - Deleted `backend/services/auth_sync.py` (dual-write service)
