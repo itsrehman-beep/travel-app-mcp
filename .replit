@@ -59,10 +59,6 @@ externalPort = 8000
 localPort = 35205
 externalPort = 3000
 
-[[ports]]
-localPort = 35633
-externalPort = 3001
-
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "python backend/server.py & cd frontend && npm run preview"]
