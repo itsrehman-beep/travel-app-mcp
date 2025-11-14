@@ -1125,12 +1125,17 @@ if __name__ == "__main__":
             if not user:
                 return JSONResponse(content={'error': 'User not found'}, status_code=404)
             
+            full_name = user.get('full_name', '')
+            name_parts = full_name.split(maxsplit=1)
+            first_name = name_parts[0] if len(name_parts) > 0 else ''
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
+            
             return JSONResponse(content={
-                'user_id': user.get('id'),
+                'id': user.get('id'),
                 'email': user.get('email'),
-                'first_name': user.get('first_name'),
-                'last_name': user.get('last_name'),
-                'full_name': user.get('full_name')
+                'first_name': first_name,
+                'last_name': last_name,
+                'full_name': full_name
             })
         except Exception as e:
             return JSONResponse(content={'error': str(e)}, status_code=401)

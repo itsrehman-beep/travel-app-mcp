@@ -29,9 +29,11 @@ class UserResponse(BaseModel):
 
 
 class AuthTokenResponse(BaseModel):
-    auth_token: str
+    token: str
     user_id: str
     email: str
+    first_name: str
+    last_name: str
     expires_at: str
 
 
@@ -188,9 +190,16 @@ class SheetsAuthService:
                 self.sheets.update_row("User", i + 2, updated_user_row)
                 break
         
+        full_name = user.get("full_name", "")
+        name_parts = full_name.split(maxsplit=1)
+        first_name = name_parts[0] if len(name_parts) > 0 else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
+        
         return AuthTokenResponse(
-            auth_token=auth_token,
+            token=auth_token,
             user_id=user.get("id") or "",
             email=user.get("email") or "",
+            first_name=first_name,
+            last_name=last_name,
             expires_at=expires_at.isoformat()
         )

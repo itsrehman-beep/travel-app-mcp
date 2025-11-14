@@ -92,6 +92,14 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 ## Recent Changes
 
 ### November 14, 2025 (Latest)
+- **CRITICAL BUG FIX: Frontend Login Broken**: Fixed authentication response mismatch between backend and frontend
+  - Root cause: Backend returned `auth_token` but frontend expected `token`, so token was never stored
+  - Backend also missing `first_name` and `last_name` fields in login response
+  - Fixed: Updated `AuthTokenResponse` model to return `token`, `first_name`, `last_name`
+  - Updated `/auth/login` endpoint to parse `full_name` into separate first/last names
+  - Updated `/auth/me` endpoint to return parsed first/last names and use `id` instead of `user_id`
+  - Frontend login now works correctly with jackblack@gmail.com/password123
+
 - **HYBRID AUTHENTICATION**: Implemented dual-mode authentication for MCP tools and frontend
   - Created `AuthContextMiddleware` that extracts `Authorization: Bearer <token>` header on every request
   - Token stored in request-scoped `ContextVar` for frontend access
