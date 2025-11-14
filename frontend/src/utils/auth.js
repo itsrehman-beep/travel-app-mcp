@@ -1,4 +1,4 @@
-const AUTH_API_URL = 'http://localhost:8000/auth'
+const AUTH_API_URL = '/auth'
 const TOKEN_KEY = 'travel_auth_token'
 const USER_KEY = 'travel_user'
 

@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 import re
 import jwt
 from pydantic import BaseModel
+from contextvars import ContextVar
 from models import (
     Flight, FlightWithAvailability,
     Hotel, HotelWithCity, Room, RoomWithAvailability, RoomWithHotelInfo,
@@ -23,6 +24,9 @@ mcp = FastMCP("Travel Booking API")
 
 # Initialize Google Sheets authentication service
 auth_service = SheetsAuthService(sheets_client)
+
+# Context variable to store authentication token for current request
+_auth_token_context: ContextVar[Optional[str]] = ContextVar('auth_token', default=None)
 
 # ===== AUTHENTICATION TOOLS =====
 
@@ -952,45 +956,70 @@ def _build_booking_list(user_id: str) -> List[BookingResponse]:
     return result
 
 @mcp.tool()
-def get_user_bookings(auth_token: str) -> List[BookingResponse]:
+def get_user_bookings() -> List[BookingResponse]:
     """
     Get all bookings for the authenticated user with complete details.
-    
-    Args:
-        auth_token: Bearer authentication token from login/register
+    Requires Authorization header: 'Authorization: Bearer <token>'
     
     Returns:
         List of all user's bookings with status, prices, and booking details
     
     Raises:
-        Exception: If auth_token is invalid or expired
+        Exception: If Authorization header is missing or token is invalid/expired
     """
-    user_id = require_user(auth_token)
+    user_id = validate_session()
     return _build_booking_list(user_id)
 
 @mcp.tool()
-def get_pending_bookings(auth_token: str) -> List[BookingResponse]:
+def get_pending_bookings() -> List[BookingResponse]:
     """
     Get all pending bookings for the authenticated user (bookings awaiting payment).
-    
-    Args:
-        auth_token: Bearer authentication token from login/register
+    Requires Authorization header: 'Authorization: Bearer <token>'
     
     Returns:
         List of pending bookings that need payment to be confirmed
     
     Raises:
-        Exception: If auth_token is invalid or expired
+        Exception: If Authorization header is missing or token is invalid/expired
     """
-    user_id = require_user(auth_token)
+    user_id = validate_session()
     all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 
-# Helper function for authentication in MCP tools
+# Helper function to get auth token from request context
+def get_auth_token() -> Optional[str]:
+    """
+    Retrieve authentication token from request context.
+    Returns None if no token is set (called outside request context or no auth header).
+    """
+    return _auth_token_context.get()
+
+# Helper function to validate session from context
+def validate_session() -> str:
+    """
+    Validate bearer token from request context by checking Session table in Google Sheets.
+    Returns user_id if valid, raises exception if invalid or missing.
+    
+    This is called by MCP tools that require authentication.
+    The token is automatically extracted from Authorization header by middleware.
+    """
+    auth_token = get_auth_token()
+    if not auth_token:
+        raise Exception('Authentication required. Please provide Authorization: Bearer <token> header.')
+    
+    user_id = auth_service.validate_token(auth_token)
+    if not user_id:
+        raise Exception('Invalid or expired authentication token.')
+    
+    return user_id
+
+# Legacy helper for tools that still use explicit auth_token parameter
 def require_user(auth_token: str) -> str:
     """
     Validate bearer token by checking Session table in Google Sheets.
     Returns user_id if valid, raises exception if invalid or missing.
+    
+    DEPRECATED: Use validate_session() instead which reads token from request context.
     """
     if not auth_token:
         raise Exception('Authentication required. Please provide auth_token.')
@@ -1075,6 +1104,26 @@ if __name__ == "__main__":
     # Mount auth routes to the app
     for route in auth_routes:
         app.router.routes.insert(0, route)
+    
+    # Add authentication middleware to extract Bearer token from Authorization header
+    @app.middleware("http")
+    async def auth_context_middleware(request: Request, call_next):
+        """
+        Extract Authorization header and store token in context for MCP tools to access.
+        This allows tools to call validate_session() without passing auth_token parameter.
+        """
+        auth_header = request.headers.get('Authorization', '')
+        
+        if auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            _auth_token_context.set(token)
+        else:
+            _auth_token_context.set(None)
+        
+        response = await call_next(request)
+        
+        _auth_token_context.set(None)
+        return response
     
     # Add CORS middleware to allow frontend requests
     app.add_middleware(

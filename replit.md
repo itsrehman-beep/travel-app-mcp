@@ -92,12 +92,25 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 ## Recent Changes
 
 ### November 14, 2025 (Latest)
-- **AUTHENTICATION FIX**: Reverted MCP tools back to using `auth_token` parameter
-  - MCP protocol does not reliably pass custom HTTP headers like `Authorization` to tools
-  - `get_user_bookings(auth_token)` and `get_pending_bookings(auth_token)` use explicit parameters
-  - REST endpoints (`/auth/me`) still use Authorization headers properly
-  - Helper function `require_user(auth_token)` validates tokens against Session table in Google Sheets
-  - Added extensive debug logging to `validate_token()` for troubleshooting authentication issues
+- **MIDDLEWARE-BASED AUTHENTICATION**: Implemented automatic bearer token extraction via middleware
+  - Created `AuthContextMiddleware` that extracts `Authorization: Bearer <token>` header on every request
+  - Token stored in request-scoped `ContextVar` that MCP tools can access
+  - MCP tools (`get_user_bookings`, `get_pending_bookings`) call `validate_session()` to get user from context
+  - No need to pass `auth_token` parameter - middleware handles it automatically
+  - Frontend sends `Authorization: Bearer <token>` header via Axios interceptor
+  - Context automatically cleaned up after each request to prevent leakage
+
+- **PORT UNIFICATION FOR PUBLISHING**: Configured Vite proxy for single-port deployment
+  - Frontend runs on port 5000 (publicly exposed port)
+  - Vite proxies `/mcp` and `/auth` requests to backend on port 8000
+  - Both services accessible through single port for clean publishing
+  - Updated frontend to use relative URLs (`/auth` instead of `localhost:8000/auth`)
+
+- **DEPLOYMENT READY**: Application configured for Replit deployment
+  - Single external port (5000) proxies to both frontend and backend
+  - All authentication flows use middleware-based token validation
+  - CORS configured for production
+  - Ready to publish with "Deploy" button
 
 ### November 13, 2025
 - **CRITICAL BUG FIX: Google Sheets OAuth Token Expiration**: Fixed backend crash due to expired access tokens
