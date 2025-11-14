@@ -91,7 +91,16 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 
 ## Recent Changes
 
-### November 13, 2025 (Latest)
+### November 14, 2025 (Latest)
+- **MAJOR IMPROVEMENT: MCP Tools Now Read Request Headers**: Updated user-level tools to use FastMCP's `get_http_headers()`
+  - Removed auth_token parameters from `get_user_bookings()` and `get_pending_bookings()`
+  - Both tools now read bearer token directly from `Authorization: Bearer <token>` header
+  - Added `require_user_from_headers()` helper using FastMCP's `get_http_headers()` function
+  - MCP tools automatically extract and validate tokens from request headers
+  - No more passing auth_token in request body - proper header-based authentication!
+  - Kept legacy `require_user(auth_token)` helper for other protected tools
+
+### November 13, 2025
 - **CRITICAL BUG FIX: Google Sheets OAuth Token Expiration**: Fixed backend crash due to expired access tokens
   - Root cause: `sheets_client.py` was caching OAuth access token indefinitely without checking expiration
   - Google Sheets access tokens expire after 1 hour, causing all API calls to fail
@@ -99,14 +108,6 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
   - Auto-refreshes token from Replit Connectors API when expired
   - Installed `python-dateutil` for proper ISO 8601 date parsing
   - Better error messages when Google Sheets connection fails
-
-- **NEW FEATURE: REST Endpoints for Booking Retrieval**: Added header-based authentication for user bookings
-  - Created REST endpoints: `GET /bookings` and `GET /bookings/pending`
-  - Both endpoints read bearer token from `Authorization: Bearer <token>` header (NOT request body)
-  - Shared helper `extract_user_id_from_request()` centralizes token validation logic
-  - Kept existing MCP tools `get_user_bookings(auth_token)` and `get_pending_bookings(auth_token)` for backward compatibility
-  - MCP tools still require explicit auth_token parameter (MCP protocol limitation - cannot read HTTP headers)
-  - Frontend can now use proper RESTful pattern with Authorization headers
 
 - **CRITICAL BUG FIX: Login Duplicate User Rows**: Fixed bug where login created duplicate User rows instead of updating last_login field
   - Root cause: `update_row()` in `sheets_client.py` was incorrectly adding `+1` to row_index
