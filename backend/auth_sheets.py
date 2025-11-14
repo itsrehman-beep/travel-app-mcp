@@ -79,20 +79,35 @@ class SheetsAuthService:
         Validate bearer token by checking Session table in Google Sheets
         Returns user_id if valid, None if invalid/expired
         """
+        print(f"[DEBUG validate_token] Looking for token: {auth_token}")
         sessions = self.sheets.read_sheet("Session")
+        print(f"[DEBUG validate_token] Found {len(sessions)} sessions total")
         
-        for session in sessions:
+        for idx, session in enumerate(sessions):
+            session_token = session.get("auth_token", "")
+            print(f"[DEBUG validate_token] Session {idx}: auth_token={session_token[:20] if session_token else 'EMPTY'}... (matches: {session_token == auth_token})")
+            
             if session.get("auth_token") == auth_token:
+                print(f"[DEBUG validate_token] Token matched! Checking expiration...")
                 expires_at_str = session.get("expires_at")
+                print(f"[DEBUG validate_token] expires_at from sheet: {expires_at_str}")
                 
                 if expires_at_str:
                     try:
                         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                        now = datetime.now(timezone.utc)
+                        print(f"[DEBUG validate_token] expires_at={expires_at}, now={now}, valid={expires_at > now}")
                         if expires_at > datetime.now(timezone.utc):
-                            return session.get("user_id")
-                    except (ValueError, AttributeError):
+                            user_id = session.get("user_id")
+                            print(f"[DEBUG validate_token] Token is valid! Returning user_id: {user_id}")
+                            return user_id
+                        else:
+                            print(f"[DEBUG validate_token] Token expired!")
+                    except (ValueError, AttributeError) as e:
+                        print(f"[DEBUG validate_token] Error parsing expiration: {e}")
                         continue
         
+        print(f"[DEBUG validate_token] Token NOT found or expired. Returning None.")
         return None
     
     def register(self, request: RegisterRequest) -> UserResponse:

@@ -1,5 +1,4 @@
 from fastmcp import FastMCP
-from fastmcp.server.dependencies import get_http_headers
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import re
@@ -953,66 +952,41 @@ def _build_booking_list(user_id: str) -> List[BookingResponse]:
     return result
 
 @mcp.tool()
-def get_user_bookings() -> List[BookingResponse]:
+def get_user_bookings(auth_token: str) -> List[BookingResponse]:
     """
     Get all bookings for the authenticated user with complete details.
-    Requires Authorization header with bearer token: 'Authorization: Bearer <token>'
+    
+    Args:
+        auth_token: Bearer authentication token from login/register
     
     Returns:
         List of all user's bookings with status, prices, and booking details
     
     Raises:
-        Exception: If Authorization header is missing or token is invalid
+        Exception: If auth_token is invalid or expired
     """
-    user_id = require_user_from_headers()
+    user_id = require_user(auth_token)
     return _build_booking_list(user_id)
 
 @mcp.tool()
-def get_pending_bookings() -> List[BookingResponse]:
+def get_pending_bookings(auth_token: str) -> List[BookingResponse]:
     """
     Get all pending bookings for the authenticated user (bookings awaiting payment).
-    Requires Authorization header with bearer token: 'Authorization: Bearer <token>'
+    
+    Args:
+        auth_token: Bearer authentication token from login/register
     
     Returns:
         List of pending bookings that need payment to be confirmed
     
     Raises:
-        Exception: If Authorization header is missing or token is invalid
+        Exception: If auth_token is invalid or expired
     """
-    user_id = require_user_from_headers()
+    user_id = require_user(auth_token)
     all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 
-# Helper function for authentication in MCP tools using request headers
-def require_user_from_headers() -> str:
-    """
-    Validate bearer token from Authorization header by checking Session table in Google Sheets.
-    Returns user_id if valid, raises exception if invalid or missing.
-    
-    Requires Authorization header: 'Authorization: Bearer <token>'
-    """
-    headers = get_http_headers()
-    auth_header = headers.get('authorization', '')
-    
-    if not auth_header:
-        raise Exception('Authentication required. Please provide Authorization header.')
-    
-    if not auth_header.startswith('Bearer '):
-        raise Exception('Invalid Authorization header format. Expected: Bearer <token>')
-    
-    # Extract token from "Bearer <token>"
-    auth_token = auth_header.split(' ')[1] if len(auth_header.split(' ')) > 1 else ''
-    
-    if not auth_token:
-        raise Exception('Authentication token is missing.')
-    
-    user_id = auth_service.validate_token(auth_token)
-    if not user_id:
-        raise Exception('Invalid or expired authentication token.')
-    
-    return user_id
-
-# Helper function for authentication in MCP tools (legacy - for tools with explicit auth_token parameter)
+# Helper function for authentication in MCP tools
 def require_user(auth_token: str) -> str:
     """
     Validate bearer token by checking Session table in Google Sheets.

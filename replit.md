@@ -92,13 +92,12 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 ## Recent Changes
 
 ### November 14, 2025 (Latest)
-- **MAJOR IMPROVEMENT: MCP Tools Now Read Request Headers**: Updated user-level tools to use FastMCP's `get_http_headers()`
-  - Removed auth_token parameters from `get_user_bookings()` and `get_pending_bookings()`
-  - Both tools now read bearer token directly from `Authorization: Bearer <token>` header
-  - Added `require_user_from_headers()` helper using FastMCP's `get_http_headers()` function
-  - MCP tools automatically extract and validate tokens from request headers
-  - No more passing auth_token in request body - proper header-based authentication!
-  - Kept legacy `require_user(auth_token)` helper for other protected tools
+- **AUTHENTICATION FIX**: Reverted MCP tools back to using `auth_token` parameter
+  - MCP protocol does not reliably pass custom HTTP headers like `Authorization` to tools
+  - `get_user_bookings(auth_token)` and `get_pending_bookings(auth_token)` use explicit parameters
+  - REST endpoints (`/auth/me`) still use Authorization headers properly
+  - Helper function `require_user(auth_token)` validates tokens against Session table in Google Sheets
+  - Added extensive debug logging to `validate_token()` for troubleshooting authentication issues
 
 ### November 13, 2025
 - **CRITICAL BUG FIX: Google Sheets OAuth Token Expiration**: Fixed backend crash due to expired access tokens
