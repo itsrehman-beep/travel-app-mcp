@@ -92,11 +92,13 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 ## Recent Changes
 
 ### November 14, 2025 (Latest)
-- **MIDDLEWARE-BASED AUTHENTICATION**: Implemented automatic bearer token extraction via middleware
+- **HYBRID AUTHENTICATION**: Implemented dual-mode authentication for MCP tools and frontend
   - Created `AuthContextMiddleware` that extracts `Authorization: Bearer <token>` header on every request
-  - Token stored in request-scoped `ContextVar` that MCP tools can access
-  - MCP tools (`get_user_bookings`, `get_pending_bookings`) call `validate_session()` to get user from context
-  - No need to pass `auth_token` parameter - middleware handles it automatically
+  - Token stored in request-scoped `ContextVar` for frontend access
+  - MCP tools (`get_user_bookings`, `get_pending_bookings`) support **BOTH**:
+    1. **Frontend**: Automatic token extraction from Authorization header via middleware
+    2. **MCP Clients**: Explicit `auth_token` parameter (e.g., Postman MCP Client)
+  - `validate_session_hybrid()` tries parameter first, then context fallback
   - Frontend sends `Authorization: Bearer <token>` header via Axios interceptor
   - Context automatically cleaned up after each request to prevent leakage
 

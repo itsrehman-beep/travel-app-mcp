@@ -956,33 +956,47 @@ def _build_booking_list(user_id: str) -> List[BookingResponse]:
     return result
 
 @mcp.tool()
-def get_user_bookings() -> List[BookingResponse]:
+def get_user_bookings(auth_token: Optional[str] = None) -> List[BookingResponse]:
     """
     Get all bookings for the authenticated user with complete details.
-    Requires Authorization header: 'Authorization: Bearer <token>'
+    
+    Authentication (dual-mode):
+    - Frontend: Automatically reads from Authorization header via middleware
+    - MCP Clients: Pass auth_token parameter explicitly
+    
+    Args:
+        auth_token: (Optional) Bearer token from login/register. 
+                    If not provided, will attempt to read from Authorization header.
     
     Returns:
         List of all user's bookings with status, prices, and booking details
     
     Raises:
-        Exception: If Authorization header is missing or token is invalid/expired
+        Exception: If auth_token is invalid/expired or Authorization header is missing
     """
-    user_id = validate_session()
+    user_id = validate_session_hybrid(auth_token)
     return _build_booking_list(user_id)
 
 @mcp.tool()
-def get_pending_bookings() -> List[BookingResponse]:
+def get_pending_bookings(auth_token: Optional[str] = None) -> List[BookingResponse]:
     """
     Get all pending bookings for the authenticated user (bookings awaiting payment).
-    Requires Authorization header: 'Authorization: Bearer <token>'
+    
+    Authentication (dual-mode):
+    - Frontend: Automatically reads from Authorization header via middleware
+    - MCP Clients: Pass auth_token parameter explicitly
+    
+    Args:
+        auth_token: (Optional) Bearer token from login/register.
+                    If not provided, will attempt to read from Authorization header.
     
     Returns:
         List of pending bookings that need payment to be confirmed
     
     Raises:
-        Exception: If Authorization header is missing or token is invalid/expired
+        Exception: If auth_token is invalid/expired or Authorization header is missing
     """
-    user_id = validate_session()
+    user_id = validate_session_hybrid(auth_token)
     all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 
@@ -994,7 +1008,37 @@ def get_auth_token() -> Optional[str]:
     """
     return _auth_token_context.get()
 
-# Helper function to validate session from context
+# Hybrid validation: Try parameter first, then context (middleware)
+def validate_session_hybrid(auth_token: Optional[str] = None) -> str:
+    """
+    Validate bearer token using dual-mode authentication:
+    1. If auth_token parameter is provided, use it (MCP clients)
+    2. Otherwise, try to get token from request context (frontend via middleware)
+    
+    Returns user_id if valid, raises exception if invalid or missing.
+    
+    Args:
+        auth_token: Optional explicit token (for MCP clients)
+    """
+    # Try explicit parameter first (MCP clients)
+    if auth_token:
+        user_id = auth_service.validate_token(auth_token)
+        if not user_id:
+            raise Exception('Invalid or expired authentication token.')
+        return user_id
+    
+    # Fallback to context (frontend via middleware)
+    context_token = get_auth_token()
+    if context_token:
+        user_id = auth_service.validate_token(context_token)
+        if not user_id:
+            raise Exception('Invalid or expired authentication token.')
+        return user_id
+    
+    # Neither parameter nor header provided
+    raise Exception('Authentication required. Provide auth_token parameter OR Authorization: Bearer <token> header.')
+
+# Helper function to validate session from context only (kept for reference)
 def validate_session() -> str:
     """
     Validate bearer token from request context by checking Session table in Google Sheets.

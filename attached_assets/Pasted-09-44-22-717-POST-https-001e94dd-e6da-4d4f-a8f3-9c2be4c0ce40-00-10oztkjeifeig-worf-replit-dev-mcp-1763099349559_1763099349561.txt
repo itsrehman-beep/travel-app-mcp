@@ -1,0 +1,49 @@
+09:44:22.717
+POST https://001e94dd-e6da-4d4f-a8f3-9c2be4c0ce40-00-10oztkjeifeig.worf.replit.dev/mcp
+200
+1.44 ms
+Request Headers
+accept: application/json, text/event-stream
+content-type: application/json
+mcp-protocol-version: 2025-06-18
+mcp-session-id: 64627920565c4d00b2f271796dc01db8
+user-agent: PostmanClient/11.71.5 (AppId=72d73bfd-b1dc-4196-8de3-a7f98e7161e3)
+Response Headers
+cache-control: no-cache, no-transform
+content-type: text/event-stream
+date: Fri, 14 Nov 2025 05:44:20 GMT
+mcp-session-id: 64627920565c4d00b2f271796dc01db8
+replit-cluster: worf
+server: uvicorn
+transfer-encoding: chunked
+vary: Origin
+x-accel-buffering: no
+x-robots-tag: none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex, none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex
+Response Body
+event: message
+data: {"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"[{\"code\":\"JFK\",\"name\":\"John F. Kennedy International Airport\",\"city_id\":\"CTY0001\",\"city_name\":\"New York\"},{\"code\":\"LAX\",\"name\":\"Los Angeles International Airport\",\"city_id\":\"CTY0002\",\"city_name\":\"Los Angeles\"},{\"code\":\"LHR\",\"name\":\"London Heathrow Airport\",\"city_id\":\"CTY0003\",\"city_name\":\"London\"},{\"code\":\"CDG\",\"name\":\"Charles de Gaulle Airport\",\"city_id\":\"CTY0004\",\"city_name\":\"Paris\"},{\"code\":\"NRT\",\"name\":\"Narita International Airport\",\"city_id\":\"CTY0005\",\"city_name\":\"Tokyo\"},{\"code\":\"DXB\",\"name\":\"Dubai International Airport\",\"city_id\":\"CTY0006\",\"city_name\":\"Dubai\"}]"}],"structuredContent":{"result":[{"code":"JFK","name":"John F. Kennedy International Airport","city_id":"CTY0001","city_name":"New York"},{"code":"LAX","name":"Los Angeles International Airport","city_id":"CTY0002","city_name":"Los Angeles"},{"code":"LHR","name":"London Heathrow Airport","city_id":"CTY0003","city_name":"London"},{"code":"CDG","name":"Charles de Gaulle Airport","city_id":"CTY0004","city_name":"Paris"},{"code":"NRT","name":"Narita International Airport","city_id":"CTY0005","city_name":"Tokyo"},{"code":"DXB","name":"Dubai International Airport","city_id":"CTY0006","city_name":"Dubai"}]},"isError":false}}↵↵↵↵
+ 
+09:44:30.719
+POST https://001e94dd-e6da-4d4f-a8f3-9c2be4c0ce40-00-10oztkjeifeig.worf.replit.dev/mcp
+200
+0.3 ms
+Request Headers
+accept: application/json, text/event-stream
+content-type: application/json
+mcp-protocol-version: 2025-06-18
+mcp-session-id: 64627920565c4d00b2f271796dc01db8
+user-agent: PostmanClient/11.71.5 (AppId=72d73bfd-b1dc-4196-8de3-a7f98e7161e3)
+Response Headers
+cache-control: no-cache, no-transform
+content-type: text/event-stream
+date: Fri, 14 Nov 2025 05:44:29 GMT
+mcp-session-id: 64627920565c4d00b2f271796dc01db8
+replit-cluster: worf
+server: uvicorn
+transfer-encoding: chunked
+vary: Origin
+x-accel-buffering: no
+x-robots-tag: none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex, none, noindex, noarchive, nofollow, nositelinkssearchbox, noimageindex
+Response Body
+event: message
+data: {"jsonrpc":"2.0","id":10,"result":{"content":[{"type":"text","text":"Error calling tool 'get_pending_bookings': Authentication required. Please provide Authorization: Bearer <token> header."}],"isError":true}}↵↵↵↵
