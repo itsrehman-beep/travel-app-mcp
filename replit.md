@@ -81,17 +81,26 @@ The application features a Python-based backend using FastMCP (v2.13.0.2) for RE
 
 ## External Dependencies
 - **Google Sheets**: Used as the ONLY database for ALL data (User, Session, travel entities).
+- **gspread**: Python library for Google Sheets API (replaces Replit Connectors).
+- **google-auth**: Authentication library for service account credentials.
 - **FastMCP**: Python framework for building the backend API.
 - **React**: JavaScript library for building the user interface.
 - **React Router**: Client-side routing for React applications.
 - **Vite**: Frontend tooling for a fast development experience.
-- **Replit Connectors API**: Facilitates secure and efficient integration with Google Sheets.
 - **Pydantic**: Data validation and settings management for Python.
 - **bcrypt**: Password hashing for secure authentication.
 
 ## Recent Changes
 
-### November 14, 2025 (Latest)
+### November 28, 2025 (Latest)
+- **GOOGLE SHEETS MIGRATION: Replit Connectors → gspread + Service Account**: Replaced Replit Connectors with gspread library
+  - Now uses `SERVICE_ACCOUNT_JSON` secret for authentication (no more OAuth token expiration issues!)
+  - Installed `gspread` and `google-auth` packages
+  - Rewrote `sheets_client.py` to use gspread API
+  - Same interface maintained - all existing code works unchanged
+  - Benefits: Simpler auth, no token refresh needed, more reliable
+
+### November 14, 2025
 - **CRITICAL BUG FIX: Frontend Login Broken**: Fixed authentication response mismatch between backend and frontend
   - Root cause: Backend returned `auth_token` but frontend expected `token`, so token was never stored
   - Backend also missing `first_name` and `last_name` fields in login response

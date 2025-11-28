@@ -97,7 +97,7 @@ class SheetsClient:
         """Append a row to a sheet"""
         try:
             worksheet = self._get_worksheet(table_name)
-            worksheet.append_row(values, value_input_option=gspread.utils.ValueInputOption.raw)
+            worksheet.append_row(values, value_input_option='RAW')
             return True
         except Exception as e:
             print(f'Error appending row to {table_name}: {e}')
@@ -108,7 +108,7 @@ class SheetsClient:
         try:
             worksheet = self._get_worksheet(table_name)
             cell_range = f'A{row_index}:Z{row_index}'
-            worksheet.update(range_name=cell_range, values=[values], value_input_option=gspread.utils.ValueInputOption.raw)
+            worksheet.update(range_name=cell_range, values=[values], value_input_option='RAW')
             return True
         except Exception as e:
             print(f'Error updating row {row_index} in {table_name}: {e}')
