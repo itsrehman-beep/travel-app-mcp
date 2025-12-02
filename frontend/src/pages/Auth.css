@@ -22,7 +22,7 @@
 
 .auth-card {
   background: white;
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.12);
   padding: 3rem;
   width: 100%;
@@ -132,7 +132,7 @@
 @media (max-width: 640px) {
   .auth-card {
     padding: 2rem 1.5rem;
-    border-radius: 6px;
+    border-radius: 4px;
   }
   
   .form-row {
