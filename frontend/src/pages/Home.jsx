@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import './Home.css'
 
-const API_URL = 'http://localhost:8000/mcp'
+const API_URL = '/mcp'
 
 let mcpSessionId = null
 let requestId = 0

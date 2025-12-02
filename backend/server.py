@@ -895,7 +895,7 @@ def _build_booking_list(user_id: str) -> List[BookingResponse]:
         flight_booking = next((fb for fb in flight_bookings if fb.get('booking_id') == booking_id), None)
         hotel_booking = next((hb for hb in hotel_bookings if hb.get('booking_id') == booking_id), None)
         car_booking = next((cb for cb in car_bookings if cb.get('booking_id') == booking_id), None)
-        booking_passengers = [p.get('id') for p in passengers if p.get('booking_id') == booking_id and p.get('id')]
+        booking_passengers: List[str] = [p['id'] for p in passengers if p.get('booking_id') == booking_id and p.get('id')]
         payment = next((p for p in payments if p.get('booking_id') == booking_id), None)
         
         flight_summary = None
