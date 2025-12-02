@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { PlaneIcon } from '../components/Icons'
 import './Auth.css'
 
 export const Login = () => {
@@ -48,7 +49,7 @@ export const Login = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-icon">✈️</div>
+          <div className="auth-icon"><PlaneIcon size={56} /></div>
           <h1>Welcome Back</h1>
           <p>Sign in to continue your journey</p>
         </div>

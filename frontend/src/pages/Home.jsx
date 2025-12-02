@@ -1,5 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { 
+  PlaneIcon, 
+  HotelIcon, 
+  CarIcon, 
+  CalendarIcon, 
+  SeatIcon, 
+  UsersIcon, 
+  LocationIcon, 
+  MailIcon, 
+  StarIcon, 
+  CheckIcon, 
+  XIcon, 
+  WarningIcon,
+  ArrowRightIcon,
+  GearIcon,
+  FuelIcon
+} from '../components/Icons'
 import './Home.css'
 
 const API_URL = 'http://localhost:8000/mcp'
@@ -482,8 +499,8 @@ export const Home = () => {
 
       {error && (
         <div className="error-banner">
-          <span>⚠️ {error}</span>
-          <button onClick={() => setError('')} className="close-btn">×</button>
+          <span className="info-row"><WarningIcon size={18} /> {error}</span>
+          <button onClick={() => setError('')} className="close-btn"><XIcon size={18} /></button>
         </div>
       )}
 
@@ -495,19 +512,19 @@ export const Home = () => {
               className={`tab ${activeTab === 'flights' ? 'active' : ''}`} 
               onClick={() => setActiveTab('flights')}
             >
-              ✈️ Flights
+              <PlaneIcon size={20} /> Flights
             </button>
             <button 
               className={`tab ${activeTab === 'hotels' ? 'active' : ''}`} 
               onClick={() => setActiveTab('hotels')}
             >
-              🏨 Hotels
+              <HotelIcon size={20} /> Hotels
             </button>
             <button 
               className={`tab ${activeTab === 'cars' ? 'active' : ''}`} 
               onClick={() => setActiveTab('cars')}
             >
-              🚗 Cars
+              <CarIcon size={20} /> Cars
             </button>
           </div>
 
@@ -571,14 +588,14 @@ export const Home = () => {
                       </div>
                     </div>
                     <div className="card-details">
-                      <p>✈️ {flight.aircraft_model}</p>
-                      <p>📅 {new Date(flight.departure_time).toLocaleString()}</p>
-                      <p>💺 {flight.available_seats} seats available</p>
+                      <div className="info-row"><PlaneIcon size={16} /> {flight.aircraft_model}</div>
+                      <div className="info-row"><CalendarIcon size={16} /> {new Date(flight.departure_time).toLocaleString()}</div>
+                      <div className="info-row"><SeatIcon size={16} /> {flight.available_seats} seats available</div>
                     </div>
                     <div className="card-footer">
                       <p className="price">${flight.base_price}</p>
                       <button onClick={() => setSelectedFlight(flight)}>
-                        {selectedFlight?.id === flight.id ? '✓ Selected' : 'Select'}
+                        {selectedFlight?.id === flight.id ? <><CheckIcon size={16} /> Selected</> : 'Select'}
                       </button>
                     </div>
                   </div>
@@ -643,12 +660,14 @@ export const Home = () => {
                     <div className="card-header">
                       <h3>{hotel.name}</h3>
                       <div className="rating">
-                        {'⭐'.repeat(Math.round(hotel.rating))}
+                        {[...Array(Math.round(hotel.rating))].map((_, i) => (
+                          <StarIcon key={i} size={16} filled />
+                        ))}
                       </div>
                     </div>
                     <div className="card-details">
-                      <p>📍 {hotel.city_name}</p>
-                      <p>📧 {hotel.address}</p>
+                      <div className="info-row"><LocationIcon size={16} /> {hotel.city_name}</div>
+                      <div className="info-row"><MailIcon size={16} /> {hotel.address}</div>
                     </div>
                     <div className="card-footer">
                       <button onClick={() => fetchRooms(hotel.id, hotel.name)}>
@@ -671,12 +690,12 @@ export const Home = () => {
                         <div className="card-header">
                           <h3>{room.room_type}</h3>
                           <span className={`availability ${room.is_available ? 'available' : 'unavailable'}`}>
-                            {room.is_available ? '✓ Available' : '✗ Unavailable'}
+                            {room.is_available ? <><CheckIcon size={14} /> Available</> : <><XIcon size={14} /> Unavailable</>}
                           </span>
                         </div>
                         <div className="card-details">
-                          <p>👥 Capacity: {room.capacity} guests</p>
-                          <p>🏨 {room.hotel_name}</p>
+                          <div className="info-row"><UsersIcon size={16} /> Capacity: {room.capacity} guests</div>
+                          <div className="info-row"><HotelIcon size={16} /> {room.hotel_name}</div>
                         </div>
                         <div className="card-footer">
                           <p className="price">${room.price_per_night}/night</p>
@@ -684,7 +703,7 @@ export const Home = () => {
                             onClick={() => setSelectedRoom(room)} 
                             disabled={!room.is_available}
                           >
-                            {selectedRoom?.id === room.id ? '✓ Selected' : room.is_available ? 'Select' : 'Unavailable'}
+                            {selectedRoom?.id === room.id ? <><CheckIcon size={16} /> Selected</> : room.is_available ? 'Select' : 'Unavailable'}
                           </button>
                         </div>
                       </div>
@@ -739,15 +758,15 @@ export const Home = () => {
                       <span className="car-year">{car.year}</span>
                     </div>
                     <div className="card-details">
-                      <p>📍 {car.city_name}</p>
-                      <p>👥 {car.seats} seats</p>
-                      <p>⚙️ {car.transmission}</p>
-                      <p>⛽ {car.fuel_type}</p>
+                      <div className="info-row"><LocationIcon size={16} /> {car.city_name}</div>
+                      <div className="info-row"><UsersIcon size={16} /> {car.seats} seats</div>
+                      <div className="info-row"><GearIcon size={16} /> {car.transmission}</div>
+                      <div className="info-row"><FuelIcon size={16} /> {car.fuel_type}</div>
                     </div>
                     <div className="card-footer">
                       <p className="price">${car.price_per_day}/day</p>
                       <button onClick={() => setSelectedCar(car)}>
-                        {selectedCar?.id === car.id ? '✓ Selected' : 'Select'}
+                        {selectedCar?.id === car.id ? <><CheckIcon size={16} /> Selected</> : 'Select'}
                       </button>
                     </div>
                   </div>
@@ -763,17 +782,17 @@ export const Home = () => {
                 <h3>Your Selection</h3>
                 <div className="summary-items">
                   {selectedFlight && (
-                    <p>✈️ {selectedFlight.airline_name} {selectedFlight.flight_number} ({seatClass})</p>
+                    <p className="info-row"><PlaneIcon size={18} /> {selectedFlight.airline_name} {selectedFlight.flight_number} ({seatClass})</p>
                   )}
                   {selectedRoom && (
-                    <p>🏨 {selectedRoom.hotel_name} - {selectedRoom.room_type}</p>
+                    <p className="info-row"><HotelIcon size={18} /> {selectedRoom.hotel_name} - {selectedRoom.room_type}</p>
                   )}
                   {selectedCar && (
-                    <p>🚗 {selectedCar.brand} {selectedCar.model}</p>
+                    <p className="info-row"><CarIcon size={18} /> {selectedCar.brand} {selectedCar.model}</p>
                   )}
                 </div>
                 <button className="proceed-btn" onClick={proceedToBooking}>
-                  Proceed to Booking →
+                  Proceed to Booking <ArrowRightIcon size={18} />
                 </button>
               </div>
             </div>
