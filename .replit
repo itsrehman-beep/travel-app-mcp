@@ -1,7 +1,6 @@
 modules = ["python-3.11", "nodejs-20", "postgresql-16"]
 [agent]
 expertMode = true
-integrations = ["google-sheet:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -59,11 +58,11 @@ externalPort = 8000
 localPort = 35205
 externalPort = 3000
 
-[[ports]]
-localPort = 44873
-externalPort = 3001
-
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "python backend/server.py & cd frontend && npm run preview"]
+run = [
+  "bash",
+  "-c",
+  "python backend/server.py & cd frontend && npm run preview",
+]
 build = ["bash", "-c", "cd frontend && npm run build"]
