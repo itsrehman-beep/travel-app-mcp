@@ -1,5 +1,4 @@
 import { useAuth } from '../context/AuthContext'
-import { PlaneIcon, LogoutIcon } from './Icons'
 import './Navbar.css'
 
 export const Navbar = () => {
@@ -9,8 +8,8 @@ export const Navbar = () => {
     <nav className="navbar">
       <div className="navbar-container">
         <div className="navbar-brand">
-          <span className="brand-icon"><PlaneIcon size={28} /></span>
-          <span className="brand-text">Travel<span>Book</span></span>
+          <span className="brand-icon">✈️</span>
+          <span className="brand-text">TravelBook</span>
         </div>
         
         {isAuthenticated && (
@@ -19,7 +18,6 @@ export const Navbar = () => {
               Hello, {user?.firstName || user?.email}
             </span>
             <button onClick={logout} className="btn-logout">
-              <LogoutIcon size={18} />
               Logout
             </button>
           </div>

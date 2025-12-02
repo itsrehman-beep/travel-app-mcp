@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { GlobeIcon } from '../components/Icons'
 import './Auth.css'
 
 export const Register = () => {
@@ -60,7 +59,7 @@ export const Register = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <div className="auth-icon"><GlobeIcon size={56} /></div>
+          <div className="auth-icon">🌍</div>
           <h1>Create Account</h1>
           <p>Start your travel adventure today</p>
         </div>

@@ -1,5 +1,5 @@
 .navbar {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   box-shadow: var(--shadow-md);
   position: sticky;
   top: 0;
@@ -25,17 +25,14 @@
 }
 
 .brand-icon {
-  display: flex;
-  align-items: center;
-  color: white;
+  font-size: 2rem;
 }
 
 .brand-text {
-  color: white;
-}
-
-.brand-text span {
-  color: var(--secondary-light);
+  background: linear-gradient(to right, white, var(--secondary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .navbar-actions {
@@ -51,16 +48,14 @@
 }
 
 .btn-logout {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.2);
   color: white;
   padding: 0.5rem 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
 }
 
 .btn-logout:hover {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
 }
