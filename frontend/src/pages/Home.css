@@ -8,7 +8,7 @@
   color: white;
   text-align: center;
   padding: 4rem 2rem;
-  margin: -2rem -2rem 2rem;
+  margin: 0 -2rem 2rem -2rem;
   border-radius: 0 0 30px 30px;
   box-shadow: var(--shadow-lg);
 }
