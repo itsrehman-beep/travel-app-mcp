@@ -620,17 +620,25 @@ def get_booking(booking_id: str) -> Dict[str, Any]:
     """
     Returns full details of a booking including all sub-bookings, passengers, and payment.
     
+    Requires Authorization: Bearer <token> header.
+    User can only view their own bookings.
+    
     Args:
         booking_id: ID of the booking (e.g., BK0001)
     
     Returns:
         Complete booking information with all related entities
     """
+    user_id = require_auth()
+    
     bookings = sheets_client.read_sheet('Booking')
     booking = next((b for b in bookings if b.get('id') == booking_id), None)
     
     if not booking:
         return {'error': f'Booking {booking_id} not found'}
+    
+    if booking.get('user_id') != user_id:
+        return {'error': 'You do not have permission to view this booking'}
     
     # Get flight bookings with flight details
     flight_bookings = sheets_client.read_sheet('FlightBooking')
@@ -707,18 +715,27 @@ def cancel_booking(booking_id: str) -> Dict[str, Any]:
     """
     Cancels a booking and associated sub-bookings, updates payment status to refunded.
     
+    Requires Authorization: Bearer <token> header.
+    User can only cancel their own bookings.
+    
     Args:
         booking_id: ID of the booking to cancel (e.g., BK0001)
     
     Returns:
         Cancellation confirmation with updated status
     """
+    user_id = require_auth()
+    
     # Find the booking
     result = sheets_client.find_row_by_id('Booking', booking_id)
     if not result:
         return {'error': f'Booking {booking_id} not found'}
     
     row_index, booking = result
+    
+    # Verify ownership
+    if booking.get('user_id') != user_id:
+        return {'error': 'You do not have permission to cancel this booking'}
     
     # Check if already cancelled
     if booking.get('status') == 'cancelled':
@@ -762,6 +779,9 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
     """
     Updates passenger information.
     
+    Requires Authorization: Bearer <token> header.
+    User can only update passengers on their own bookings.
+    
     Args:
         passenger_id: ID of the passenger (e.g., PA00001)
         updates: Dictionary of fields to update (first_name, last_name, gender, dob, passport_no)
@@ -769,12 +789,21 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
     Returns:
         Updated passenger information
     """
+    user_id = require_auth()
+    
     # Find the passenger
     result = sheets_client.find_row_by_id('Passenger', passenger_id)
     if not result:
         return {'error': f'Passenger {passenger_id} not found'}
     
     row_index, passenger = result
+    
+    # Verify ownership through booking
+    booking_id = passenger.get('booking_id')
+    bookings = sheets_client.read_sheet('Booking')
+    booking = next((b for b in bookings if b.get('id') == booking_id), None)
+    if not booking or booking.get('user_id') != user_id:
+        return {'error': 'You do not have permission to update this passenger'}
     
     # Update allowed fields
     allowed_fields = {'first_name', 'last_name', 'gender', 'dob', 'passport_no'}
@@ -802,20 +831,20 @@ def update_passenger(passenger_id: str, updates: Dict[str, Any]) -> Dict[str, An
     }
 
 @mcp.tool()
-def process_payment(auth_token: str, booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
+def process_payment(booking_id: str, payment: PaymentInput) -> Dict[str, Any]:
     """
     Processes payment for a pending booking. Changes booking status from 'pending' to 'confirmed'.
     
+    Requires Authorization: Bearer <token> header.
+    
     Args:
-        auth_token: JWT authentication token from login
         booking_id: ID of the booking to pay for (e.g., BK0001)
         payment: Payment details including method and amount
     
     Returns:
         Payment confirmation with transaction details
     """
-    # Authenticate user
-    user_id = require_user(auth_token)
+    user_id = require_auth()
     # Find the booking
     result = sheets_client.find_row_by_id('Booking', booking_id)
     if not result:
@@ -956,47 +985,35 @@ def _build_booking_list(user_id: str) -> List[BookingResponse]:
     return result
 
 @mcp.tool()
-def get_user_bookings(auth_token: Optional[str] = None) -> List[BookingResponse]:
+def get_user_bookings() -> List[BookingResponse]:
     """
     Get all bookings for the authenticated user with complete details.
     
-    Authentication (dual-mode):
-    - Frontend: Automatically reads from Authorization header via middleware
-    - MCP Clients: Pass auth_token parameter explicitly
-    
-    Args:
-        auth_token: (Optional) Bearer token from login/register. 
-                    If not provided, will attempt to read from Authorization header.
+    Requires Authorization: Bearer <token> header.
     
     Returns:
         List of all user's bookings with status, prices, and booking details
     
     Raises:
-        Exception: If auth_token is invalid/expired or Authorization header is missing
+        Exception: If Authorization header is missing or token is invalid/expired
     """
-    user_id = validate_session_hybrid(auth_token)
+    user_id = require_auth()
     return _build_booking_list(user_id)
 
 @mcp.tool()
-def get_pending_bookings(auth_token: Optional[str] = None) -> List[BookingResponse]:
+def get_pending_bookings() -> List[BookingResponse]:
     """
     Get all pending bookings for the authenticated user (bookings awaiting payment).
     
-    Authentication (dual-mode):
-    - Frontend: Automatically reads from Authorization header via middleware
-    - MCP Clients: Pass auth_token parameter explicitly
-    
-    Args:
-        auth_token: (Optional) Bearer token from login/register.
-                    If not provided, will attempt to read from Authorization header.
+    Requires Authorization: Bearer <token> header.
     
     Returns:
         List of pending bookings that need payment to be confirmed
     
     Raises:
-        Exception: If auth_token is invalid/expired or Authorization header is missing
+        Exception: If Authorization header is missing or token is invalid/expired
     """
-    user_id = validate_session_hybrid(auth_token)
+    user_id = require_auth()
     all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 

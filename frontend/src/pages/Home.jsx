@@ -142,16 +142,25 @@ const unwrapResult = (result) => {
   return result
 }
 
-const callTool = async (toolName, args = {}) => {
+const callTool = async (toolName, args = {}, requireAuth = false) => {
   await initializeMCP()
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/event-stream',
+    'Mcp-Session-Id': mcpSessionId
+  }
+  
+  if (requireAuth) {
+    const token = localStorage.getItem('travel_auth_token')
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+  }
   
   const response = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json, text/event-stream',
-      'Mcp-Session-Id': mcpSessionId
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'tools/call',
@@ -353,7 +362,7 @@ export const Home = () => {
       let bookingResponse
       
       if (selectedFlight) {
-        const flightBookingData = {
+        bookingResponse = await callTool('book_flight', {
           request: {
             flight_id: selectedFlight.id,
             seat_class: seatClass,
@@ -365,26 +374,18 @@ export const Home = () => {
               passport_no: p.passport_no
             }))
           }
-        }
-        bookingResponse = await callTool('book_flight', {
-          auth_token: authToken,
-          ...flightBookingData
-        })
+        }, true)
       } else if (selectedRoom) {
-        const hotelBookingData = {
+        bookingResponse = await callTool('book_hotel', {
           request: {
             room_id: selectedRoom.id,
             check_in: hotelSearch.check_in,
             check_out: hotelSearch.check_out,
             guests: hotelSearch.guests
           }
-        }
-        bookingResponse = await callTool('book_hotel', {
-          auth_token: authToken,
-          ...hotelBookingData
-        })
+        }, true)
       } else if (selectedCar) {
-        const carBookingData = {
+        bookingResponse = await callTool('book_car', {
           request: {
             car_id: selectedCar.id,
             pickup_time: carSearch.pickup_date + 'T10:00:00',
@@ -392,11 +393,7 @@ export const Home = () => {
             pickup_location: 'Airport',
             dropoff_location: 'Hotel'
           }
-        }
-        bookingResponse = await callTool('book_car', {
-          auth_token: authToken,
-          ...carBookingData
-        })
+        }, true)
       }
       
       if (bookingResponse && bookingResponse.booking_id) {
@@ -431,13 +428,12 @@ export const Home = () => {
       }
 
       const paymentResponse = await callTool('process_payment', {
-        auth_token: authToken,
         booking_id: pendingBooking.booking_id,
         payment: {
           method: paymentMethod,
           amount: pendingBooking.total_amount
         }
-      })
+      }, true)
       
       if (paymentResponse && paymentResponse.success) {
         alert(`Payment successful!\n\nBooking ID: ${paymentResponse.booking_id}\nPayment ID: ${paymentResponse.payment_id}\nTransaction Ref: ${paymentResponse.transaction_ref}\nStatus: ${paymentResponse.booking_status}`)
