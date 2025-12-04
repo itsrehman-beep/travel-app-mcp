@@ -1,10 +1,10 @@
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 from datetime import datetime, date, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import re
 import jwt
 from pydantic import BaseModel
-from contextvars import ContextVar
 from models import (
     Flight, FlightWithAvailability,
     Hotel, HotelWithCity, Room, RoomWithAvailability, RoomWithHotelInfo,
@@ -24,9 +24,6 @@ mcp = FastMCP("Travel Booking API")
 
 # Initialize Google Sheets authentication service
 auth_service = SheetsAuthService(sheets_client)
-
-# Context variable to store authentication token for current request
-_auth_token_context: ContextVar[Optional[str]] = ContextVar('auth_token', default=None)
 
 # ===== AUTHENTICATION TOOLS =====
 
@@ -1017,22 +1014,27 @@ def get_pending_bookings() -> List[BookingResponse]:
     all_bookings = _build_booking_list(user_id)
     return [b for b in all_bookings if b.status == "pending"]
 
-# Helper function to get auth token from request context
 def get_auth_token() -> Optional[str]:
     """
-    Retrieve authentication token from request context.
-    Returns None if no token is set (called outside request context or no auth header).
+    Retrieve authentication token from HTTP Authorization header.
+    Uses FastMCP's get_http_headers() to access request headers from within tool functions.
+    Returns None if no Authorization header or invalid format.
     """
-    return _auth_token_context.get()
+    headers = get_http_headers()
+    auth_header = headers.get('authorization', '')
+    
+    if auth_header.startswith('Bearer '):
+        return auth_header.split(' ')[1]
+    return None
 
 def require_auth() -> str:
     """
     Require authentication via Authorization header.
-    Validates bearer token from request context by checking Session table in Google Sheets.
+    Validates bearer token by checking Session table in Google Sheets.
     Returns user_id if valid, raises exception if invalid or missing.
     
     This is the ONLY authentication method for protected MCP tools.
-    The token is automatically extracted from Authorization header by middleware.
+    Uses FastMCP's get_http_headers() to access the Authorization header directly.
     """
     auth_token = get_auth_token()
     if not auth_token:
@@ -1123,26 +1125,6 @@ if __name__ == "__main__":
     # Mount auth routes to the app
     for route in auth_routes:
         app.router.routes.insert(0, route)
-    
-    # Add authentication middleware to extract Bearer token from Authorization header
-    @app.middleware("http")
-    async def auth_context_middleware(request: Request, call_next):
-        """
-        Extract Authorization header and store token in context for MCP tools to access.
-        This allows tools to call validate_session() without passing auth_token parameter.
-        """
-        auth_header = request.headers.get('Authorization', '')
-        
-        if auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-            _auth_token_context.set(token)
-        else:
-            _auth_token_context.set(None)
-        
-        response = await call_next(request)
-        
-        _auth_token_context.set(None)
-        return response
     
     # Add CORS middleware to allow frontend requests
     app.add_middleware(
