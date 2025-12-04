@@ -417,20 +417,20 @@ def list_cars(city: Optional[str] = None) -> List[CarWithCity]:
 # ===== BOOKING MANAGEMENT TOOLS =====
 
 @mcp.tool()
-def book_flight(auth_token: str, request: BookFlightRequest) -> PendingBookingResponse:
+def book_flight(request: BookFlightRequest) -> PendingBookingResponse:
     """
     Books a flight with passenger details. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
+    Requires Authorization: Bearer <token> header.
+    
     Args:
-        auth_token: JWT authentication token from login
         request: Flight booking request with flight_id, seat_class, and passengers
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
-    # Authenticate user and get user_id
-    user_id = require_user(auth_token)
+    user_id = require_auth()
     
     # Validation: Must have at least 1 passenger
     if len(request.passengers) == 0:
@@ -491,20 +491,20 @@ def book_flight(auth_token: str, request: BookFlightRequest) -> PendingBookingRe
     )
 
 @mcp.tool()
-def book_hotel(auth_token: str, request: BookHotelRequest) -> PendingBookingResponse:
+def book_hotel(request: BookHotelRequest) -> PendingBookingResponse:
     """
     Books a hotel room. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
+    Requires Authorization: Bearer <token> header.
+    
     Args:
-        auth_token: JWT authentication token from login
         request: Hotel booking request with room_id, check-in/out dates, and guests
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
-    # Authenticate user and get user_id
-    user_id = require_user(auth_token)
+    user_id = require_auth()
     
     # Validation: Check-in must be before check-out
     if request.check_in >= request.check_out:
@@ -553,20 +553,20 @@ def book_hotel(auth_token: str, request: BookHotelRequest) -> PendingBookingResp
     )
 
 @mcp.tool()
-def book_car(auth_token: str, request: BookCarRequest) -> PendingBookingResponse:
+def book_car(request: BookCarRequest) -> PendingBookingResponse:
     """
     Books a rental car. Returns booking_id with 'pending' status.
     Use process_payment() to complete payment and confirm the booking.
     
+    Requires Authorization: Bearer <token> header.
+    
     Args:
-        auth_token: JWT authentication token from login
         request: Car booking request with car_id, pickup/dropoff times and locations
     
     Returns:
         Pending booking with booking_id and total amount to be paid
     """
-    # Authenticate user and get user_id
-    user_id = require_user(auth_token)
+    user_id = require_auth()
     
     # Validation: Pickup must be before dropoff
     if request.pickup_time >= request.dropoff_time:
@@ -1008,65 +1008,18 @@ def get_auth_token() -> Optional[str]:
     """
     return _auth_token_context.get()
 
-# Hybrid validation: Try parameter first, then context (middleware)
-def validate_session_hybrid(auth_token: Optional[str] = None) -> str:
+def require_auth() -> str:
     """
-    Validate bearer token using dual-mode authentication:
-    1. If auth_token parameter is provided, use it (MCP clients)
-    2. Otherwise, try to get token from request context (frontend via middleware)
-    
+    Require authentication via Authorization header.
+    Validates bearer token from request context by checking Session table in Google Sheets.
     Returns user_id if valid, raises exception if invalid or missing.
     
-    Args:
-        auth_token: Optional explicit token (for MCP clients)
-    """
-    # Try explicit parameter first (MCP clients)
-    if auth_token:
-        user_id = auth_service.validate_token(auth_token)
-        if not user_id:
-            raise Exception('Invalid or expired authentication token.')
-        return user_id
-    
-    # Fallback to context (frontend via middleware)
-    context_token = get_auth_token()
-    if context_token:
-        user_id = auth_service.validate_token(context_token)
-        if not user_id:
-            raise Exception('Invalid or expired authentication token.')
-        return user_id
-    
-    # Neither parameter nor header provided
-    raise Exception('Authentication required. Provide auth_token parameter OR Authorization: Bearer <token> header.')
-
-# Helper function to validate session from context only (kept for reference)
-def validate_session() -> str:
-    """
-    Validate bearer token from request context by checking Session table in Google Sheets.
-    Returns user_id if valid, raises exception if invalid or missing.
-    
-    This is called by MCP tools that require authentication.
+    This is the ONLY authentication method for protected MCP tools.
     The token is automatically extracted from Authorization header by middleware.
     """
     auth_token = get_auth_token()
     if not auth_token:
         raise Exception('Authentication required. Please provide Authorization: Bearer <token> header.')
-    
-    user_id = auth_service.validate_token(auth_token)
-    if not user_id:
-        raise Exception('Invalid or expired authentication token.')
-    
-    return user_id
-
-# Legacy helper for tools that still use explicit auth_token parameter
-def require_user(auth_token: str) -> str:
-    """
-    Validate bearer token by checking Session table in Google Sheets.
-    Returns user_id if valid, raises exception if invalid or missing.
-    
-    DEPRECATED: Use validate_session() instead which reads token from request context.
-    """
-    if not auth_token:
-        raise Exception('Authentication required. Please provide auth_token.')
     
     user_id = auth_service.validate_token(auth_token)
     if not user_id:
